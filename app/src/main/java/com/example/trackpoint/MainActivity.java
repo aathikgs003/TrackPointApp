@@ -74,9 +74,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void performLocalFallbackAuthentication(String email, String password) {
-        // 1. Staff Admin Role
+        // 1. Super Admin Role
+        SuperAdminModel superAdmin = repository.authenticateSuperAdmin(email, password);
+        if (superAdmin != null || ((email.equalsIgnoreCase("admin@gmail.com") || email.equalsIgnoreCase("superadmin@gmail.com") || email.equalsIgnoreCase("SPADM001")) && (password.equals("123") || password.equals("admin")))) {
+            handleLoginSuccess("SUPER_ADMIN", "SPADM001", "Super Admin", "", email);
+            return;
+        }
+
+        // 2. Staff Admin Role
         StaffAdminModel staffAdmin = repository.authenticateStaffAdmin(email, password);
-        if (staffAdmin != null || (email.equalsIgnoreCase("suruthika@gmail.com") && password.equals("123"))) {
+        if (staffAdmin != null || ((email.equalsIgnoreCase("suruthika@gmail.com") || email.equalsIgnoreCase("STF001")) && (password.equals("123") || password.equals("admin")))) {
             String staffName = staffAdmin != null ? staffAdmin.getName() : "Suruthika J";
             String staffId = staffAdmin != null ? staffAdmin.getStaffId() : "STF001";
             String staffDept = staffAdmin != null ? staffAdmin.getDepartment() : "CSE";
@@ -86,9 +93,9 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 2. Student Admin Role
+        // 3. Student Admin Role
         StudentAdminModel studentAdmin = repository.authenticateStudentAdmin(email, password);
-        if (studentAdmin != null || (email.equalsIgnoreCase("aathi@gmail.com") && password.equals("123"))) {
+        if (studentAdmin != null || ((email.equalsIgnoreCase("aathi@gmail.com") || email.equalsIgnoreCase("SADM001")) && (password.equals("123") || password.equals("admin")))) {
             String adminId = studentAdmin != null ? studentAdmin.getAdminId() : "SADM001";
             String adminName = studentAdmin != null ? studentAdmin.getName() : "Aathi";
 
@@ -96,18 +103,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 3. Student Role
+        // 4. Student Role
         StudentModel student = repository.authenticateStudent(email, password);
-        if (student != null || ((email.equalsIgnoreCase("arun@gmail.com") || email.equalsIgnoreCase("CSE22CS001")) && password.equals("123"))) {
+        if (student != null || ((email.equalsIgnoreCase("arun@gmail.com") || email.equalsIgnoreCase("CSE22CS001")) && (password.equals("123") || password.equals("admin")))) {
             String regNo = student != null ? student.getRegisterNumber() : "CSE22CS001";
 
             handleLoginSuccess("STUDENT", regNo, student != null ? student.getName() : "Arun Kumar", "", email);
-            return;
-        }
-
-        // 4. Super Admin Role
-        if ((email.equalsIgnoreCase("admin@gmail.com") || email.equalsIgnoreCase("superadmin@gmail.com")) && (password.equals("123") || password.equals("admin"))) {
-            handleLoginSuccess("SUPER_ADMIN", "SPADM001", "Super Admin", "", email);
             return;
         }
 
@@ -119,7 +120,10 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = sessionPrefs.edit();
         editor.putString("logged_in_role", role);
 
-        if ("STAFF_ADMIN".equalsIgnoreCase(role)) {
+        if ("SUPER_ADMIN".equalsIgnoreCase(role)) {
+            editor.apply();
+            startActivity(new Intent(MainActivity.this, SuperAdminDashboard.class));
+        } else if ("STAFF_ADMIN".equalsIgnoreCase(role)) {
             editor.putString("logged_in_staff_id", userId != null ? userId : "STF001")
                   .putString("logged_in_staff_name", userName != null ? userName : "Suruthika J")
                   .putString("logged_in_staff_dept", department != null ? department : "CSE")
@@ -132,9 +136,6 @@ public class MainActivity extends AppCompatActivity {
         } else if ("STUDENT".equalsIgnoreCase(role)) {
             editor.putString("logged_in_reg_no", userId != null ? userId : "CSE22CS001").apply();
             startActivity(new Intent(MainActivity.this, StudentDashboardActivity.class));
-        } else if ("SUPER_ADMIN".equalsIgnoreCase(role)) {
-            editor.apply();
-            startActivity(new Intent(MainActivity.this, SuperAdminDashboard.class));
         }
 
         edtEmail.setText("");

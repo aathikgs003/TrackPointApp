@@ -29,7 +29,11 @@ public class StudentRepository {
 
     public SuperAdminModel authenticateSuperAdmin(String emailOrId, String password) {
         if (emailOrId == null || password == null) return null;
-        return new SuperAdminModel("Super Admin", "SPADM001", emailOrId, "+91 98765 43299", password);
+        String lower = emailOrId.toLowerCase().trim();
+        if ((lower.equals("superadmin@gmail.com") || lower.equals("admin@gmail.com") || lower.equals("spadm001")) && (password.equals("123") || password.equals("admin"))) {
+            return new SuperAdminModel("Super Admin", "SPADM001", emailOrId, "+91 98765 43299", password);
+        }
+        return null;
     }
 
     // --- STAFF ADMIN OPERATIONS ---
@@ -52,7 +56,11 @@ public class StudentRepository {
 
     public StaffAdminModel authenticateStaffAdmin(String emailOrId, String password) {
         if (emailOrId == null || password == null) return null;
-        return new StaffAdminModel("Suruthika J", "STF001", "Computer Science & Engineering", emailOrId, "+91 98765 43200");
+        String lower = emailOrId.toLowerCase().trim();
+        if ((lower.equals("suruthika@gmail.com") || lower.equals("stf001")) && (password.equals("123") || password.equals("admin"))) {
+            return new StaffAdminModel("Suruthika J", "STF001", "Computer Science & Engineering", emailOrId, "+91 98765 43200");
+        }
+        return null;
     }
 
     public boolean updateStaffAdmin(StaffAdminModel staff) {
@@ -106,7 +114,11 @@ public class StudentRepository {
 
     public StudentModel authenticateStudent(String emailOrRegNo, String password) {
         if (emailOrRegNo == null || password == null) return null;
-        return new StudentModel("Arun Kumar", "CSE22CS001", "CSE", "III Year", emailOrRegNo, "98765 43210");
+        String lower = emailOrRegNo.toLowerCase().trim();
+        if ((lower.equals("arun@gmail.com") || lower.equals("cse22cs001")) && (password.equals("123") || password.equals("admin"))) {
+            return new StudentModel("Arun Kumar", "CSE22CS001", "CSE", "III Year", emailOrRegNo, "98765 43210");
+        }
+        return null;
     }
 
     // --- STUDENT ADMIN OPERATIONS ---
@@ -148,7 +160,11 @@ public class StudentRepository {
 
     public StudentAdminModel authenticateStudentAdmin(String emailOrId, String password) {
         if (emailOrId == null || password == null) return null;
-        return new StudentAdminModel("Aathi", "SADM001", "CSE", "III Year", emailOrId, "98765 43201");
+        String lower = emailOrId.toLowerCase().trim();
+        if ((lower.equals("aathi@gmail.com") || lower.equals("sadm001")) && (password.equals("123") || password.equals("admin"))) {
+            return new StudentAdminModel("Aathi", "SADM001", "CSE", "III Year", emailOrId, "98765 43201");
+        }
+        return null;
     }
 
     // --- DEPARTMENTS & METRICS ---
