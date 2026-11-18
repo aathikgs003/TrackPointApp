@@ -1,5 +1,6 @@
 package com.example.trackpoint;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -174,23 +175,13 @@ public class StaffSubmissionDetails extends AppCompatActivity {
                         viewerIntent.putExtra("fileType", fType);
                         viewerIntent.putExtra("fileName", fName);
                         viewerIntent.putExtra("notes", fNotes);
+                        viewerIntent.putExtra("dateKey", todayDateKey);
                         startActivity(viewerIntent);
                     });
                 }
 
                 if (btnHeaderDownload != null) {
-                    btnHeaderDownload.setOnClickListener(v -> {
-                        if (presignedUrl != null && !presignedUrl.isEmpty()) {
-                            try {
-                                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(presignedUrl));
-                                startActivity(browserIntent);
-                            } catch (Exception e) {
-                                Toast.makeText(this, "Downloading " + fName + " via S3...", Toast.LENGTH_SHORT).show();
-                            }
-                        } else {
-                            Toast.makeText(this, "Downloading " + fName + "...", Toast.LENGTH_SHORT).show();
-                        }
-                    });
+                    btnHeaderDownload.setOnClickListener(v -> downloadFileDirectlyToDevice(presignedUrl, fName));
                 }
             }
         }
@@ -207,8 +198,35 @@ public class StaffSubmissionDetails extends AppCompatActivity {
                 }
 
                 repository.updateStaffRemark(finalRegId, todayDateKey, remark);
-                Toast.makeText(this, "Remark saved for " + finalName + " in SQLite database!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Remark saved for " + finalName + " in Neon database!", Toast.LENGTH_SHORT).show();
             });
+        }
+    }
+
+    private void downloadFileDirectlyToDevice(String fileUrl, String fileName) {
+        if (fileUrl == null || fileUrl.trim().isEmpty()) {
+            Toast.makeText(this, "File URL unavailable for download", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        try {
+            android.app.DownloadManager.Request request = new android.app.DownloadManager.Request(Uri.parse(fileUrl));
+            request.setTitle("Downloading " + fileName);
+            request.setDescription("Downloading file from TrackPoint Storage...");
+            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, fileName);
+            request.setAllowedOverMetered(true);
+            request.setAllowedOverRoaming(true);
+
+            android.app.DownloadManager downloadManager = (android.app.DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (downloadManager != null) {
+                downloadManager.enqueue(request);
+                Toast.makeText(this, "Downloading " + fileName + " directly to your Downloads folder...", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "Download Manager unavailable", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 }

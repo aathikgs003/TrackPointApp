@@ -47,7 +47,7 @@
 
     </LinearLayout>
 
-    <!-- Document Canvas -->
+    <!-- Document Canvas ScrollView -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -70,14 +70,47 @@
                 android:textColor="#18233F"
                 android:layout_marginBottom="12dp" />
 
-            <!-- Simulated Document / Image Preview Sheet -->
-            <LinearLayout
+            <!-- Progress Loading Indicator -->
+            <ProgressBar
+                android:id="@+id/progressBarLoading"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="center"
+                android:visibility="visible"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp" />
+
+            <!-- Image File Preview View -->
+            <ImageView
+                android:id="@+id/imgFilePreview"
                 android:layout_width="match_parent"
-                android:layout_height="440dp"
+                android:layout_height="wrap_content"
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter"
+                android:visibility="gone"
+                android:background="@drawable/action_card"
+                android:elevation="4dp"
+                android:contentDescription="File Image Preview" />
+
+            <!-- PDF / Document Web Viewer -->
+            <android.webkit.WebView
+                android:id="@+id/webViewPdfPreview"
+                android:layout_width="match_parent"
+                android:layout_height="650dp"
+                android:visibility="gone"
+                android:background="@drawable/action_card"
+                android:elevation="4dp" />
+
+            <!-- Notes / Fallback View -->
+            <LinearLayout
+                android:id="@+id/layoutNotesFallback"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="@drawable/action_card"
                 android:elevation="4dp"
-                android:padding="20dp">
+                android:padding="20dp"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/txtDocHeader"
@@ -97,8 +130,7 @@
                 <TextView
                     android:id="@+id/txtDocBody"
                     android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
                     android:textSize="14sp"
                     android:lineSpacingExtra="4dp"
                     android:textColor="#18233F" />
@@ -109,7 +141,8 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:textSize="11sp"
-                    android:textColor="#68738A" />
+                    android:textColor="#68738A"
+                    android:layout_marginTop="12dp" />
 
             </LinearLayout>
 

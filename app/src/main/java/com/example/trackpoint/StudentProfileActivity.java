@@ -10,19 +10,22 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class StudentProfileActivity extends AppCompatActivity {
 
     ImageView btnBack;
     Button btnLogout;
     TextView tvStudentName, tvStudentEmail, tvStudentPhone, tvStudentDepartment, tvStudentYear, tvStudentRegNo;
-    StudentRepository repository;
+    TrackPointRepository repository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_profile);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         btnBack = findViewById(R.id.btnBack);
         btnLogout = findViewById(R.id.btnLogout);
@@ -51,16 +54,24 @@ public class StudentProfileActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         String loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        StudentModel student = repository.getStudentByRegNo(loggedInRegNo);
+        repository.getStudentByRegNo(loggedInRegNo, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto student) {
+                if (student != null) {
+                    if (tvStudentName != null) tvStudentName.setText(student.getName());
+                    if (tvStudentRegNo != null) tvStudentRegNo.setText(student.getRegisterNumber());
+                    if (tvStudentDepartment != null) tvStudentDepartment.setText(student.getDepartment());
+                    if (tvStudentYear != null) tvStudentYear.setText(student.getYear());
+                    if (tvStudentEmail != null) tvStudentEmail.setText(student.getEmail());
+                    if (tvStudentPhone != null) tvStudentPhone.setText(student.getPhone());
+                }
+            }
 
-        if (student != null) {
-            if (tvStudentName != null) tvStudentName.setText(student.getName());
-            if (tvStudentRegNo != null) tvStudentRegNo.setText(student.getRegisterNumber());
-            if (tvStudentDepartment != null) tvStudentDepartment.setText(student.getDepartment());
-            if (tvStudentYear != null) tvStudentYear.setText(student.getYear());
-            if (tvStudentEmail != null) tvStudentEmail.setText(student.getEmail());
-            if (tvStudentPhone != null) tvStudentPhone.setText(student.getPhone());
-        }
+            @Override
+            public void onError(Exception e) {
+                if (tvStudentRegNo != null) tvStudentRegNo.setText(loggedInRegNo);
+            }
+        });
     }
 
     private void showLogoutDialog() {

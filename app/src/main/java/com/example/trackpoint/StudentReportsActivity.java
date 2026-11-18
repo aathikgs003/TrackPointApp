@@ -14,9 +14,12 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.DailyActivityDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 
 public class StudentReportsActivity extends AppCompatActivity {
@@ -29,7 +32,7 @@ public class StudentReportsActivity extends AppCompatActivity {
     Calendar filterCalendar;
     boolean isFilterBySingleDate = true;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     String loggedInRegNo = "CSE22CS001";
 
     @Override
@@ -37,7 +40,7 @@ public class StudentReportsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_reports);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
@@ -134,8 +137,6 @@ public class StudentReportsActivity extends AppCompatActivity {
         if (layoutReportContent == null) return;
         layoutReportContent.removeAllViews();
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-
         if (isFilterBySingleDate) {
             SimpleDateFormat keyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.getDefault());
             SimpleDateFormat displayFmt = new SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault());
@@ -143,38 +144,55 @@ public class StudentReportsActivity extends AppCompatActivity {
             String dateKey = keyFmt.format(filterCalendar.getTime());
             String dateDisplay = displayFmt.format(filterCalendar.getTime());
 
-            DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, dateKey);
-            boolean isSubmitted = (dbModel != null) || prefs.getBoolean("submitted_" + loggedInRegNo + "_" + dateKey, false);
+            // Query live record for single date from Neon PostgreSQL table daily_activities
+            repository.getDailyActivity(loggedInRegNo, dateKey, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+                @Override
+                public void onSuccess(DailyActivityDto activity) {
+                    if (activity != null && ((activity.getFileName() != null && !activity.getFileName().isEmpty()) || (activity.getNotes() != null && !activity.getNotes().isEmpty()))) {
+                        String fileName = activity.getFileName() != null && !activity.getFileName().isEmpty() ? activity.getFileName() : "Document Uploaded";
+                        String notes = activity.getNotes() != null ? activity.getNotes() : "No description provided";
+                        String submitTime = activity.getSubmitTime() != null ? activity.getSubmitTime() : "Submitted Today";
 
-            if (isSubmitted) {
-                String fileName = dbModel != null ? dbModel.getFileName() : prefs.getString("file_name_" + loggedInRegNo + "_" + dateKey, "Document Uploaded");
-                String notes = dbModel != null ? dbModel.getNotes() : prefs.getString("notes_" + loggedInRegNo + "_" + dateKey, "No description provided");
-                String submitTime = dbModel != null ? dbModel.getSubmitTime() : prefs.getString("submit_time_" + loggedInRegNo + "_" + dateKey, "Submitted Today");
+                        layoutReportContent.removeAllViews();
+                        layoutReportContent.addView(createReportCardView(dateDisplay, fileName, notes, submitTime, true));
+                    } else {
+                        layoutReportContent.removeAllViews();
+                        layoutReportContent.addView(createReportCardView(dateDisplay, "No File Uploaded", "No activity document or description was submitted for this date.", "Not Submitted", false));
+                    }
+                }
 
-                layoutReportContent.addView(createReportCardView(dateDisplay, fileName, notes, submitTime, true));
-            } else {
-                layoutReportContent.addView(createReportCardView(dateDisplay, "No File Uploaded", "No activity document or description was submitted for this date.", "Not Submitted", false));
-            }
+                @Override
+                public void onError(Exception e) {
+                    layoutReportContent.removeAllViews();
+                    layoutReportContent.addView(createReportCardView(dateDisplay, "No File Uploaded", "No activity document or description was submitted for this date.", "Not Submitted", false));
+                }
+            });
         } else {
-            // Show user-specific history entries
-            SimpleDateFormat keyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.getDefault());
-            SimpleDateFormat displayFmt = new SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault());
+            // Query all submission entries for logged-in student from Neon PostgreSQL table daily_activities
+            repository.getDailyActivitiesForStudent(loggedInRegNo, new TrackPointRepository.RepositoryCallback<List<DailyActivityDto>>() {
+                @Override
+                public void onSuccess(List<DailyActivityDto> activities) {
+                    layoutReportContent.removeAllViews();
+                    if (activities != null && !activities.isEmpty()) {
+                        for (DailyActivityDto act : activities) {
+                            String dateStr = act.getDateKey() != null ? act.getDateKey().replace("_", "-") : "Activity Date";
+                            String fileName = act.getFileName() != null && !act.getFileName().isEmpty() ? act.getFileName() : "Document Uploaded";
+                            String notes = act.getNotes() != null ? act.getNotes() : "No description provided";
+                            String submitTime = act.getSubmitTime() != null ? act.getSubmitTime() : "Submitted Today";
 
-            String todayKeyStr = keyFmt.format(Calendar.getInstance().getTime());
-            String todayDisplayStr = displayFmt.format(Calendar.getInstance().getTime());
+                            layoutReportContent.addView(createReportCardView(dateStr, fileName, notes, submitTime, true));
+                        }
+                    } else {
+                        layoutReportContent.addView(createReportCardView("All History", "No Submissions Found", "No activity documents have been submitted yet.", "No Data", false));
+                    }
+                }
 
-            DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, todayKeyStr);
-            boolean isSubmitted = (dbModel != null) || prefs.getBoolean("submitted_" + loggedInRegNo + "_" + todayKeyStr, false);
-
-            if (isSubmitted) {
-                String fileName = dbModel != null ? dbModel.getFileName() : prefs.getString("file_name_" + loggedInRegNo + "_" + todayKeyStr, "Document Uploaded");
-                String notes = dbModel != null ? dbModel.getNotes() : prefs.getString("notes_" + loggedInRegNo + "_" + todayKeyStr, "No description provided");
-                String submitTime = dbModel != null ? dbModel.getSubmitTime() : prefs.getString("submit_time_" + loggedInRegNo + "_" + todayKeyStr, "Submitted Today");
-
-                layoutReportContent.addView(createReportCardView(todayDisplayStr, fileName, notes, submitTime, true));
-            } else {
-                layoutReportContent.addView(createReportCardView("All History", "No Submissions Found", "No activity documents have been submitted yet.", "No Data", false));
-            }
+                @Override
+                public void onError(Exception e) {
+                    layoutReportContent.removeAllViews();
+                    layoutReportContent.addView(createReportCardView("All History", "No Submissions Found", "No activity documents have been submitted yet.", "No Data", false));
+                }
+            });
         }
     }
 

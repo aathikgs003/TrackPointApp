@@ -16,6 +16,11 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.AttendanceDto;
+import com.example.trackpoint.network.dto.DailyActivityDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -28,7 +33,7 @@ public class StudentDashboardActivity extends AppCompatActivity {
     ImageView imgDashboardStatusIcon;
     LinearLayout cardTodayActivityStatus, layoutDashboardStatusBadge;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     String loggedInRegNo = "CSE22CS001";
 
     @Override
@@ -36,7 +41,7 @@ public class StudentDashboardActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_dashboard);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         tvStudentGreeting = findViewById(R.id.tvStudentGreeting);
         tvStudentRegNo = findViewById(R.id.tvStudentRegNo);
@@ -50,7 +55,7 @@ public class StudentDashboardActivity extends AppCompatActivity {
         // Header Logout Button
         findViewById(R.id.notificationButton).setOnClickListener(v -> showLogoutDialog());
 
-        // Summary Cards - No redirect on click per user request
+        // Summary Cards
         View cardAttendance = findViewById(R.id.cardAttendance);
         View cardCompleted = findViewById(R.id.cardCompleted);
         View cardInProgress = findViewById(R.id.cardInProgress);
@@ -86,18 +91,29 @@ public class StudentDashboardActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        StudentModel student = repository.getStudentByRegNo(loggedInRegNo);
-        if (student != null) {
-            if (tvStudentGreeting != null) {
-                tvStudentGreeting.setText("Hello, " + student.getName() + " 👋");
+        // Query live student profile row from Neon PostgreSQL
+        repository.getStudentByRegNo(loggedInRegNo, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto student) {
+                if (student != null) {
+                    if (tvStudentGreeting != null) {
+                        tvStudentGreeting.setText("Hello, " + student.getName() + " 👋");
+                    }
+                    if (tvStudentRegNo != null) {
+                        tvStudentRegNo.setText("Reg No: " + student.getRegisterNumber());
+                    }
+                    if (tvHeaderSubDeptYear != null) {
+                        tvHeaderSubDeptYear.setText(student.getDepartment() + " Department - " + student.getYear());
+                    }
+                }
             }
-            if (tvStudentRegNo != null) {
-                tvStudentRegNo.setText("Reg No: " + student.getRegisterNumber());
+
+            @Override
+            public void onError(Exception e) {
+                if (tvStudentGreeting != null) tvStudentGreeting.setText("Hello Student 👋");
+                if (tvStudentRegNo != null) tvStudentRegNo.setText("Reg No: " + loggedInRegNo);
             }
-            if (tvHeaderSubDeptYear != null) {
-                tvHeaderSubDeptYear.setText(student.getDepartment() + " Department - " + student.getYear());
-            }
-        }
+        });
     }
 
     private void loadTodayActivityStatus() {
@@ -115,22 +131,60 @@ public class StudentDashboardActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, dateKeyStr);
-        boolean isSubmitted = (dbModel != null) || prefs.getBoolean("submitted_" + loggedInRegNo + "_" + dateKeyStr, false);
+        // Query all attendance records from Neon PostgreSQL table attendance for logged in student
+        repository.getAttendanceForStudent(loggedInRegNo, new TrackPointRepository.RepositoryCallback<java.util.List<AttendanceDto>>() {
+            @Override
+            public void onSuccess(java.util.List<AttendanceDto> attendanceList) {
+                int presentCount = 0;
+                int absentCount = 0;
+                if (attendanceList != null) {
+                    for (AttendanceDto att : attendanceList) {
+                        if ("Present".equalsIgnoreCase(att.getStatus())) {
+                            presentCount++;
+                        } else if ("Absent".equalsIgnoreCase(att.getStatus())) {
+                            absentCount++;
+                        }
+                    }
+                }
+                int totalDays = presentCount + absentCount;
+                int percentage = totalDays > 0 ? (int) Math.round(((double) presentCount / totalDays) * 100) : 100;
+                if (tvStudentAttendance != null) {
+                    tvStudentAttendance.setText(percentage + "%");
+                }
+            }
 
-        String fileName = dbModel != null ? dbModel.getFileName() : prefs.getString("file_name_" + loggedInRegNo + "_" + dateKeyStr, "Document Uploaded");
-        String submitTime = dbModel != null ? dbModel.getSubmitTime() : prefs.getString("submit_time_" + loggedInRegNo + "_" + dateKeyStr, "Submitted Today");
+            @Override
+            public void onError(Exception e) {
+                if (tvStudentAttendance != null) tvStudentAttendance.setText("100%");
+            }
+        });
 
-        int[] attStats = repository.getAttendanceStatsForStudent(loggedInRegNo, "");
-        int totalAttDays = attStats[0];
-        int presentAttDays = attStats[1];
-        int attendancePercent = totalAttDays > 0 ? (int) Math.round(((double) presentAttDays / totalAttDays) * 100) : 100;
+        // Query live daily activity submission from Neon PostgreSQL
+        repository.getDailyActivity(loggedInRegNo, dateKeyStr, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+            @Override
+            public void onSuccess(DailyActivityDto activity) {
+                boolean isSubmitted = (activity != null && ((activity.getFileName() != null && !activity.getFileName().isEmpty()) || (activity.getNotes() != null && !activity.getNotes().isEmpty())));
 
-        if (tvStudentAttendance != null) {
-            tvStudentAttendance.setText(attendancePercent + "%");
+                String fileName = activity != null && activity.getFileName() != null && !activity.getFileName().isEmpty() ? activity.getFileName() : "Document Uploaded";
+                String submitTime = activity != null && activity.getSubmitTime() != null && !activity.getSubmitTime().isEmpty() ? activity.getSubmitTime() : "Submitted Today";
+
+                updateDashboardSubmissionUI(isSubmitted, fileName, submitTime);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                updateDashboardSubmissionUI(false, "", "");
+            }
+        });
+
+        if (cardTodayActivityStatus != null) {
+            cardTodayActivityStatus.setOnClickListener(v ->
+                    startActivity(new Intent(this, StudentTodayActivity.class))
+            );
         }
+    }
 
+    private void updateDashboardSubmissionUI(boolean isSubmitted, String fileName, String submitTime) {
         int completed = isSubmitted ? 1 : 0;
         int inProgress = isSubmitted ? 0 : 1;
         int totalTasks = 1;
@@ -186,12 +240,6 @@ public class StudentDashboardActivity extends AppCompatActivity {
                 tvDashboardSubmitTime.setText("Tap to submit");
             }
         }
-
-        if (cardTodayActivityStatus != null) {
-            cardTodayActivityStatus.setOnClickListener(v ->
-                    startActivity(new Intent(this, StudentTodayActivity.class))
-            );
-        }
     }
 
     private void showSidebar() {
@@ -201,11 +249,20 @@ public class StudentDashboardActivity extends AppCompatActivity {
         TextView tvStudentSidebarName = sidebarView.findViewById(R.id.tvStudentSidebarName);
         TextView tvStudentSidebarSub = sidebarView.findViewById(R.id.tvStudentSidebarSub);
 
-        StudentModel currentStudent = repository.getStudentByRegNo(loggedInRegNo);
-        if (currentStudent != null) {
-            if (tvStudentSidebarName != null) tvStudentSidebarName.setText(currentStudent.getName());
-            if (tvStudentSidebarSub != null) tvStudentSidebarSub.setText(currentStudent.getDepartment() + " Department - " + currentStudent.getYear());
-        }
+        repository.getStudentByRegNo(loggedInRegNo, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto student) {
+                if (student != null) {
+                    if (tvStudentSidebarName != null) tvStudentSidebarName.setText(student.getName());
+                    if (tvStudentSidebarSub != null) tvStudentSidebarSub.setText(student.getDepartment() + " Department - " + student.getYear());
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (tvStudentSidebarName != null) tvStudentSidebarName.setText("Student");
+            }
+        });
 
         PopupWindow sidebar = new PopupWindow(
                 sidebarView,
@@ -217,13 +274,6 @@ public class StudentDashboardActivity extends AppCompatActivity {
         sidebar.setBackgroundDrawable(new ColorDrawable(Color.WHITE));
         sidebar.setOutsideTouchable(true);
         sidebar.setElevation(20);
-
-        sidebar.setClippingEnabled(false);
-
-        if (android.os.Build.VERSION.SDK_INT >= 29) {
-            sidebar.setIsClippedToScreen(false);
-            sidebar.setIsLaidOutInScreen(true);
-        }
 
         sidebar.showAtLocation(
                 getWindow().getDecorView(),

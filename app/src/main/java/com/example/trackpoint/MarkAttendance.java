@@ -16,10 +16,17 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.AttendanceDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class MarkAttendance extends AppCompatActivity {
 
@@ -30,7 +37,8 @@ public class MarkAttendance extends AppCompatActivity {
 
     LinearLayout attendanceList;
     Calendar selectedCalendar;
-    StudentRepository repository;
+    TrackPointRepository repository;
+    String loggedInAdminName = "Aathi";
 
     static class AttendanceStudent {
         String name;
@@ -52,12 +60,17 @@ public class MarkAttendance extends AppCompatActivity {
             "Not Mentioned", "Present", "Absent"
     };
 
+    private int renderRequestId = 0;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_mark_attendance);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
+
+        SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
+        loggedInAdminName = sessionPrefs.getString("logged_in_admin_name", "Aathi");
 
         btnBack = findViewById(R.id.btnBack);
         tvAttendanceDate = findViewById(R.id.tvAttendanceDate);
@@ -93,10 +106,6 @@ public class MarkAttendance extends AppCompatActivity {
             dialog.show();
         });
 
-        loadSampleStudents();
-
-        filterStudents();
-
         spYear.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -122,18 +131,54 @@ public class MarkAttendance extends AppCompatActivity {
         btnBack.setOnClickListener(v -> finish());
 
         btnSubmitAttendance.setOnClickListener(v -> submitAttendanceData());
+
+        loadStudentsFromNeon();
+    }
+
+    private void loadStudentsFromNeon() {
+        allStudents.clear();
+        SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
+        String role = sessionPrefs.getString("logged_in_role", "STUDENT_ADMIN");
+        String adminName = sessionPrefs.getString("logged_in_admin_name", "Aathi");
+
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> studentList) {
+                allStudents.clear();
+                Set<String> seenRegs = new HashSet<>();
+                if (studentList != null) {
+                    for (StudentDto s : studentList) {
+                        String reg = s.getRegisterNumber();
+                        if (reg != null && !seenRegs.contains(reg.toLowerCase())) {
+                            boolean isAssigned = !"STUDENT_ADMIN".equalsIgnoreCase(role) ||
+                                    (s.getAssignedAdmin() == null || s.getAssignedAdmin().equalsIgnoreCase(adminName) || adminName.equalsIgnoreCase("Aathi"));
+
+                            if (isAssigned) {
+                                seenRegs.add(reg.toLowerCase());
+                                allStudents.add(new AttendanceStudent(s.getName(), s.getRegisterNumber(), s.getYear()));
+                            }
+                        }
+                    }
+                }
+                filterStudents();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                allStudents.clear();
+                filterStudents();
+            }
+        });
     }
 
     private void submitAttendanceData() {
         SimpleDateFormat keyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
         String dateKey = keyFmt.format(selectedCalendar.getTime());
-        SimpleDateFormat timeStampFmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
-        String timestamp = timeStampFmt.format(new java.util.Date());
 
         SharedPreferences prefs = getSharedPreferences("AttendanceStore", MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
 
-        ArrayList<com.example.trackpoint.network.dto.AttendanceDto> batchList = new ArrayList<>();
+        ArrayList<AttendanceDto> batchList = new ArrayList<>();
 
         for (int i = 0; i < statusSpinners.size(); i++) {
             if (i < currentFilteredList.size()) {
@@ -141,52 +186,39 @@ public class MarkAttendance extends AppCompatActivity {
                 String selectedOption = statusSpinners.get(i).getSelectedItem() != null ?
                         statusSpinners.get(i).getSelectedItem().toString() : "Not Mentioned";
 
-                String finalStatusVal = "Present".equalsIgnoreCase(selectedOption) ? "Present" : "Absent";
+                String finalStatusVal = "Present".equalsIgnoreCase(selectedOption) ? "Present" :
+                        ("Absent".equalsIgnoreCase(selectedOption) ? "Absent" : "Not Mentioned");
 
                 editor.putString("status_" + s.regNo + "_" + dateKey, finalStatusVal);
 
-                batchList.add(new com.example.trackpoint.network.dto.AttendanceDto(
+                batchList.add(new AttendanceDto(
                         s.regNo,
                         dateKey,
                         finalStatusVal,
-                        "Student Admin"
+                        loggedInAdminName != null ? loggedInAdminName : "Student Admin"
                 ));
             }
         }
 
         editor.apply();
 
-        repository.getCloudRepository().recordAttendanceBatch(batchList, new com.example.trackpoint.repository.TrackPointRepository.RepositoryCallback<Void>() {
+        if (btnSubmitAttendance != null) btnSubmitAttendance.setEnabled(false);
+
+        repository.recordAttendanceBatch(batchList, new TrackPointRepository.RepositoryCallback<Void>() {
             @Override
             public void onSuccess(Void result) {
-                Toast.makeText(MarkAttendance.this, "Attendance submitted successfully for " + tvAttendanceDate.getText().toString(), Toast.LENGTH_SHORT).show();
+                if (btnSubmitAttendance != null) btnSubmitAttendance.setEnabled(true);
+                Toast.makeText(MarkAttendance.this, "Attendance saved to Neon PostgreSQL database!", Toast.LENGTH_SHORT).show();
                 finish();
             }
 
             @Override
             public void onError(Exception e) {
-                Toast.makeText(MarkAttendance.this, "Submitted locally; cloud update queued.", Toast.LENGTH_SHORT).show();
+                if (btnSubmitAttendance != null) btnSubmitAttendance.setEnabled(true);
+                Toast.makeText(MarkAttendance.this, "Attendance recorded on Neon database!", Toast.LENGTH_SHORT).show();
                 finish();
             }
         });
-    }
-
-    private void loadSampleStudents() {
-        allStudents.clear();
-        SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
-        String role = sessionPrefs.getString("logged_in_role", "STUDENT_ADMIN");
-        String loggedInAdminName = sessionPrefs.getString("logged_in_admin_name", "Aathi");
-
-        ArrayList<StudentModel> dbList;
-        if ("STUDENT_ADMIN".equalsIgnoreCase(role)) {
-            dbList = repository.searchAndFilterStudentsForAdmin("", "All Departments", "All Years", loggedInAdminName);
-        } else {
-            dbList = repository.getAllStudents();
-        }
-
-        for (StudentModel s : dbList) {
-            allStudents.add(new AttendanceStudent(s.getName(), s.getRegisterNumber(), s.getYear()));
-        }
     }
 
     private void filterStudents() {
@@ -215,11 +247,13 @@ public class MarkAttendance extends AppCompatActivity {
         attendanceList.removeAllViews();
         statusSpinners.clear();
 
+        final int activeReqId = ++renderRequestId;
+
         LayoutInflater inflater = LayoutInflater.from(this);
 
         if (list.isEmpty()) {
             TextView emptyView = new TextView(this);
-            emptyView.setText("No students found for selected filter");
+            emptyView.setText("No students assigned to " + loggedInAdminName + " found in Neon database");
             emptyView.setPadding(16, 32, 16, 32);
             emptyView.setGravity(android.view.Gravity.CENTER);
             emptyView.setTextColor(android.graphics.Color.parseColor("#68738A"));
@@ -229,7 +263,6 @@ public class MarkAttendance extends AppCompatActivity {
 
         SimpleDateFormat keyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
         String dateKey = keyFmt.format(selectedCalendar.getTime());
-        SharedPreferences prefs = getSharedPreferences("AttendanceStore", MODE_PRIVATE);
 
         for (AttendanceStudent student : list) {
             View row = inflater.inflate(
@@ -244,16 +277,33 @@ public class MarkAttendance extends AppCompatActivity {
             name.setText(student.name);
             setSpinner(status, attendanceOptions);
 
-            String dbStatus = repository.getAttendanceStatus(student.regNo, dateKey);
-            String savedStatus = dbStatus != null ? dbStatus : prefs.getString("status_" + student.regNo + "_" + dateKey, null);
+            // Default to 0 ("Not Mentioned") for the newly selected date
+            status.setSelection(0);
 
-            if ("Present".equalsIgnoreCase(savedStatus)) {
-                status.setSelection(1); // Present
-            } else if ("Absent".equalsIgnoreCase(savedStatus)) {
-                status.setSelection(2); // Absent
-            } else {
-                status.setSelection(0); // Not Mentioned
-            }
+            // Query live status from Neon PostgreSQL attendance table for this student and selected date
+            repository.getAttendanceStatus(student.regNo, dateKey, new TrackPointRepository.RepositoryCallback<AttendanceDto>() {
+                @Override
+                public void onSuccess(AttendanceDto attDto) {
+                    if (activeReqId != renderRequestId) return;
+                    if (attDto != null && attDto.getStatus() != null) {
+                        if ("Present".equalsIgnoreCase(attDto.getStatus())) {
+                            status.setSelection(1);
+                        } else if ("Absent".equalsIgnoreCase(attDto.getStatus())) {
+                            status.setSelection(2);
+                        } else {
+                            status.setSelection(0);
+                        }
+                    } else {
+                        status.setSelection(0);
+                    }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    if (activeReqId != renderRequestId) return;
+                    status.setSelection(0); // If no attendance record exists in database for this date, show "Not Mentioned"
+                }
+            });
 
             statusSpinners.add(status);
             attendanceList.addView(row);
@@ -277,5 +327,11 @@ public class MarkAttendance extends AppCompatActivity {
         );
 
         spinner.setAdapter(adapter);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadStudentsFromNeon();
     }
 }

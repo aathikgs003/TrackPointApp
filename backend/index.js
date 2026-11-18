@@ -83,98 +83,98 @@ async function initAnnouncementsTable() {
 initAnnouncementsTable();
 
 // =============================================================================
-// 1. AUTHENTICATION ROUTE
+// 1. AUTHENTICATION ROUTE (Optimized with Parallel Database Queries)
 // =============================================================================
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password, role } = req.body;
+  const { email, password } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ success: false, message: 'Email/ID and password are required' });
   }
 
+  const cleanEmail = email.trim().toLowerCase();
+
   try {
+    // Fast path for Super Admin demo credentials
+    if ((cleanEmail === 'admin@gmail.com' || cleanEmail === 'superadmin@gmail.com' || cleanEmail === 'spadm001') && (password === '123' || password === 'admin')) {
+      return res.json({
+        success: true,
+        token: 'spadm_token_' + Date.now(),
+        role: 'SUPER_ADMIN',
+        user_id: 'SPADM001',
+        user_name: 'Super Admin',
+        department: '',
+        year: '',
+        message: 'Login successful'
+      });
+    }
+
+    // Execute ALL 4 role queries simultaneously in PARALLEL via Promise.all (1 single SSL round-trip)
+    const [superRes, staffRes, saRes, stRes] = await Promise.all([
+      pool.query('SELECT * FROM super_admins WHERE (LOWER(email) = $1 OR LOWER(admin_id) = $1) AND password = $2', [cleanEmail, password]),
+      pool.query('SELECT * FROM staff_admins WHERE (LOWER(email) = $1 OR LOWER(staff_id) = $1) AND password = $2', [cleanEmail, password]),
+      pool.query('SELECT * FROM student_admins WHERE (LOWER(email) = $1 OR LOWER(admin_id) = $1) AND password = $2', [cleanEmail, password]),
+      pool.query('SELECT * FROM students WHERE (LOWER(email) = $1 OR LOWER(register_number) = $1) AND password = $2', [cleanEmail, password])
+    ]);
+
     // 1. Check Super Admins
-    if (!role || role === 'SUPER_ADMIN' || role === 'ANY') {
-      const superRes = await pool.query(
-        'SELECT * FROM super_admins WHERE (LOWER(email) = LOWER($1) OR LOWER(admin_id) = LOWER($1)) AND password = $2',
-        [email, password]
-      );
-      if (superRes.rows.length > 0 || ((email.toLowerCase() === 'admin@gmail.com' || email.toLowerCase() === 'superadmin@gmail.com') && (password === '123' || password === 'admin'))) {
-        const u = superRes.rows[0] || { name: 'Super Admin', admin_id: 'SPADM001', email };
-        return res.json({
-          success: true,
-          token: 'spadm_token_' + Date.now(),
-          role: 'SUPER_ADMIN',
-          user_id: u.admin_id || 'SPADM001',
-          user_name: u.name || 'Super Admin',
-          department: '',
-          year: '',
-          message: 'Login successful'
-        });
-      }
+    if (superRes.rows.length > 0) {
+      const u = superRes.rows[0];
+      return res.json({
+        success: true,
+        token: 'spadm_token_' + Date.now(),
+        role: 'SUPER_ADMIN',
+        user_id: u.admin_id || 'SPADM001',
+        user_name: u.name || 'Super Admin',
+        department: '',
+        year: '',
+        message: 'Login successful'
+      });
     }
 
     // 2. Check Staff Admins
-    if (!role || role === 'STAFF_ADMIN' || role === 'ANY') {
-      const staffRes = await pool.query(
-        'SELECT * FROM staff_admins WHERE (LOWER(email) = LOWER($1) OR LOWER(staff_id) = LOWER($1)) AND password = $2',
-        [email, password]
-      );
-      if (staffRes.rows.length > 0 || (email.toLowerCase() === 'suruthika@gmail.com' && password === '123')) {
-        const u = staffRes.rows[0] || { name: 'Suruthika J', staff_id: 'STF001', department: 'CSE' };
-        return res.json({
-          success: true,
-          token: 'staff_token_' + Date.now(),
-          role: 'STAFF_ADMIN',
-          user_id: u.staff_id || 'STF001',
-          user_name: u.name || 'Suruthika J',
-          department: u.department || 'CSE',
-          year: '',
-          message: 'Login successful'
-        });
-      }
+    if (staffRes.rows.length > 0 || (cleanEmail === 'suruthika@gmail.com' && password === '123')) {
+      const u = staffRes.rows[0] || { name: 'Suruthika J', staff_id: 'STF001', department: 'CSE' };
+      return res.json({
+        success: true,
+        token: 'staff_token_' + Date.now(),
+        role: 'STAFF_ADMIN',
+        user_id: u.staff_id || 'STF001',
+        user_name: u.name || 'Suruthika J',
+        department: u.department || 'CSE',
+        year: '',
+        message: 'Login successful'
+      });
     }
 
     // 3. Check Student Admins
-    if (!role || role === 'STUDENT_ADMIN' || role === 'ANY') {
-      const saRes = await pool.query(
-        'SELECT * FROM student_admins WHERE (LOWER(email) = LOWER($1) OR LOWER(admin_id) = LOWER($1)) AND password = $2',
-        [email, password]
-      );
-      if (saRes.rows.length > 0 || (email.toLowerCase() === 'aathi@gmail.com' && password === '123')) {
-        const u = saRes.rows[0] || { name: 'Aathi', admin_id: 'SADM001', department: 'CSE', year: 'III Year' };
-        return res.json({
-          success: true,
-          token: 'sa_token_' + Date.now(),
-          role: 'STUDENT_ADMIN',
-          user_id: u.admin_id || 'SADM001',
-          user_name: u.name || 'Aathi',
-          department: u.department || 'CSE',
-          year: u.year || 'III Year',
-          message: 'Login successful'
-        });
-      }
+    if (saRes.rows.length > 0 || (cleanEmail === 'aathi@gmail.com' && password === '123')) {
+      const u = saRes.rows[0] || { name: 'Aathi', admin_id: 'SADM001', department: 'CSE', year: 'III Year' };
+      return res.json({
+        success: true,
+        token: 'sa_token_' + Date.now(),
+        role: 'STUDENT_ADMIN',
+        user_id: u.admin_id || 'SADM001',
+        user_name: u.name || 'Aathi',
+        department: u.department || 'CSE',
+        year: u.year || 'III Year',
+        message: 'Login successful'
+      });
     }
 
     // 4. Check Students
-    if (!role || role === 'STUDENT' || role === 'ANY') {
-      const stRes = await pool.query(
-        'SELECT * FROM students WHERE (LOWER(email) = LOWER($1) OR LOWER(register_number) = LOWER($1)) AND password = $2',
-        [email, password]
-      );
-      if (stRes.rows.length > 0 || ((email.toLowerCase() === 'arun@gmail.com' || email.toLowerCase() === 'cse22cs001') && password === '123')) {
-        const u = stRes.rows[0] || { name: 'Arun Kumar', register_number: 'CSE22CS001', department: 'CSE', year: 'III Year' };
-        return res.json({
-          success: true,
-          token: 'student_token_' + Date.now(),
-          role: 'STUDENT',
-          user_id: u.register_number || 'CSE22CS001',
-          user_name: u.name || 'Arun Kumar',
-          department: u.department || 'CSE',
-          year: u.year || 'III Year',
-          message: 'Login successful'
-        });
-      }
+    if (stRes.rows.length > 0 || ((cleanEmail === 'arun@gmail.com' || cleanEmail === 'cse22cs001') && password === '123')) {
+      const u = stRes.rows[0] || { name: 'Arun Kumar', register_number: 'CSE22CS001', department: 'CSE', year: 'III Year' };
+      return res.json({
+        success: true,
+        token: 'student_token_' + Date.now(),
+        role: 'STUDENT',
+        user_id: u.register_number || 'CSE22CS001',
+        user_name: u.name || 'Arun Kumar',
+        department: u.department || 'CSE',
+        year: u.year || 'III Year',
+        message: 'Login successful'
+      });
     }
 
     return res.status(401).json({ success: false, message: 'Invalid credentials or password' });
@@ -447,6 +447,18 @@ app.post('/api/super-admins', async (req, res) => {
 // =============================================================================
 // 6. ATTENDANCE ROUTES
 // =============================================================================
+app.get('/api/attendance/student/:regNo', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM attendance WHERE register_number = $1 ORDER BY date_key DESC',
+      [req.params.regNo]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/attendance/:regNo/:dateKey', async (req, res) => {
   try {
     const result = await pool.query(
@@ -532,6 +544,19 @@ const getActivityHandler = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+app.get('/api/activities/student/:regNo', async (req, res) => {
+  const { regNo } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM daily_activities WHERE register_number = $1 ORDER BY date_key DESC',
+      [regNo]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 app.get('/api/activities/:regNo/:dateKey', getActivityHandler);
 app.get('/api/daily-activities/:regNo/:dateKey', getActivityHandler);

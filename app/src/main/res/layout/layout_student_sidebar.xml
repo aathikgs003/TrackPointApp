@@ -118,35 +118,6 @@
                     android:textSize="15sp"/>
             </LinearLayout>
 
-            <!-- Daily Progress -->
-            <LinearLayout
-                android:id="@+id/menuProgress"
-                android:layout_width="match_parent"
-                android:layout_height="50dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:background="?android:attr/selectableItemBackground">
-
-                <ImageView
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:src="@drawable/daily_progress_symbol"
-                    app:tint="#52627A"
-                    android:contentDescription="Progress Icon"/>
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:text="Daily Progress"
-                    android:textColor="#34415B"
-                    android:textSize="15sp"/>
-            </LinearLayout>
-
             <!-- Attendance -->
             <LinearLayout
                 android:id="@+id/menuAttendance"

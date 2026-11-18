@@ -97,7 +97,7 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="16dp"/>
 
-            <!-- FIRST ROW (MY STUDENTS & PROGRESS ENTRIES - METRIC CARDS ONLY) -->
+            <!-- FIRST ROW (MY STUDENTS & PROGRESS ENTRIES METRIC CARDS) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -383,7 +383,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Attendance Reports"
+                    android:text="Reports"
                     android:textColor="#18233F"
                     android:textSize="14sp"
                     android:textStyle="bold"/>

@@ -13,6 +13,10 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.AttendanceDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -34,7 +38,7 @@ public class StudentAttendanceActivity extends AppCompatActivity {
     int todayMonth;
     int todayYear;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     String studentId = "CSE22CS001";
     String assignedAdminName = "Aathi";
 
@@ -43,7 +47,7 @@ public class StudentAttendanceActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_attendance);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         studentId = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
@@ -110,12 +114,21 @@ public class StudentAttendanceActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         studentId = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        StudentModel student = repository.getStudentByRegNo(studentId);
-        if (student != null && student.getAssignedAdmin() != null && !student.getAssignedAdmin().isEmpty()) {
-            assignedAdminName = student.getAssignedAdmin();
-        } else {
-            assignedAdminName = "Aathi";
-        }
+        repository.getStudentByRegNo(studentId, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto student) {
+                if (student != null && student.getAssignedAdmin() != null && !student.getAssignedAdmin().isEmpty()) {
+                    assignedAdminName = student.getAssignedAdmin();
+                } else {
+                    assignedAdminName = "Aathi";
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                assignedAdminName = "Aathi";
+            }
+        });
     }
 
     private void loadTodayAttendance() {
@@ -133,70 +146,83 @@ public class StudentAttendanceActivity extends AppCompatActivity {
         Calendar calendar = Calendar.getInstance();
         int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
 
-        SharedPreferences prefs = getSharedPreferences("AttendanceStore", MODE_PRIVATE);
-        String dbStatus = repository.getAttendanceStatus(studentId, todayKeyStr);
-        String savedTodayStatus = dbStatus != null ? dbStatus : prefs.getString("status_" + studentId + "_" + todayKeyStr, null);
+        repository.getAttendanceStatus(studentId, todayKeyStr, new TrackPointRepository.RepositoryCallback<AttendanceDto>() {
+            @Override
+            public void onSuccess(AttendanceDto attendance) {
+                String status = attendance != null ? attendance.getStatus() : null;
+                updateTodayStatusUI(status, dayOfWeek);
+            }
 
-        if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) {
+            @Override
+            public void onError(Exception e) {
+                updateTodayStatusUI(null, dayOfWeek);
+            }
+        });
+    }
+
+    private void updateTodayStatusUI(String status, int dayOfWeek) {
+        boolean isWeekend = (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY);
+
+        if (isWeekend) {
             if (tvTodayStatus != null) {
-                tvTodayStatus.setText("HOLIDAY");
-                tvTodayStatus.setTextColor(Color.parseColor("#9299AA"));
+                tvTodayStatus.setText("WEEKEND HOLIDAY");
+                tvTodayStatus.setTextColor(Color.parseColor("#7A8294"));
             }
             if (tvTodayNote != null) {
                 tvTodayNote.setText("Weekend Holiday");
             }
             if (imgTodayStatusIcon != null) {
                 imgTodayStatusIcon.setImageResource(R.drawable.timeline_dot);
-                imgTodayStatusIcon.setColorFilter(Color.parseColor("#9299AA"));
+                imgTodayStatusIcon.setColorFilter(Color.parseColor("#7A8294"));
             }
             if (layoutTodayBadge != null) {
-                layoutTodayBadge.setBackgroundResource(R.drawable.card_purple);
+                layoutTodayBadge.setBackgroundResource(R.drawable.bg_day_today);
             }
-        } else if ("Present".equalsIgnoreCase(savedTodayStatus)) {
+        } else if ("Present".equalsIgnoreCase(status)) {
             if (tvTodayStatus != null) {
                 tvTodayStatus.setText("PRESENT");
                 tvTodayStatus.setTextColor(Color.parseColor("#10B23E"));
             }
             if (tvTodayNote != null) {
-                tvTodayNote.setText("Marked by " + assignedAdminName);
+                tvTodayNote.setText("Marked Present by " + assignedAdminName);
             }
             if (imgTodayStatusIcon != null) {
                 imgTodayStatusIcon.setImageResource(R.drawable.check_circle_symbol);
                 imgTodayStatusIcon.setColorFilter(Color.parseColor("#10B23E"));
             }
             if (layoutTodayBadge != null) {
-                layoutTodayBadge.setBackgroundResource(R.drawable.card_green);
+                layoutTodayBadge.setBackgroundResource(R.drawable.bg_day_today_present);
             }
-        } else if ("Absent".equalsIgnoreCase(savedTodayStatus)) {
+        } else if ("Absent".equalsIgnoreCase(status)) {
             if (tvTodayStatus != null) {
                 tvTodayStatus.setText("ABSENT");
                 tvTodayStatus.setTextColor(Color.parseColor("#D94343"));
             }
             if (tvTodayNote != null) {
-                tvTodayNote.setText("Marked by " + assignedAdminName);
+                tvTodayNote.setText("Marked Absent by " + assignedAdminName);
             }
             if (imgTodayStatusIcon != null) {
                 imgTodayStatusIcon.setImageResource(R.drawable.radio_button_symbol);
                 imgTodayStatusIcon.setColorFilter(Color.parseColor("#D94343"));
             }
             if (layoutTodayBadge != null) {
-                layoutTodayBadge.setBackgroundResource(R.drawable.card_yellow);
+                layoutTodayBadge.setBackgroundResource(R.drawable.bg_day_today_absent);
             }
         } else {
-            // Not Marked yet by Student Admin in database: White card!
+            // Not Mentioned / Unmarked Weekday
             if (tvTodayStatus != null) {
-                tvTodayStatus.setText("NOT MARKED");
-                tvTodayStatus.setTextColor(Color.parseColor("#68738A"));
+                tvTodayStatus.setText("NOT MENTIONED");
+                tvTodayStatus.setTextColor(Color.parseColor("#4935B8"));
             }
             if (tvTodayNote != null) {
-                tvTodayNote.setText("Attendance not entered yet by " + assignedAdminName);
+                tvTodayNote.setText("Not Mentioned");
             }
             if (imgTodayStatusIcon != null) {
-                imgTodayStatusIcon.setImageResource(R.drawable.pending_symbol);
-                imgTodayStatusIcon.setColorFilter(Color.parseColor("#68738A"));
+                imgTodayStatusIcon.setImageResource(R.drawable.timeline_dot);
+                imgTodayStatusIcon.setColorFilter(Color.parseColor("#4935B8"));
             }
             if (layoutTodayBadge != null) {
-                layoutTodayBadge.setBackgroundResource(R.drawable.action_card);
+                layoutTodayBadge.setBackgroundResource(R.drawable.bg_day_today);
             }
         }
     }
@@ -233,7 +259,6 @@ public class StudentAttendanceActivity extends AppCompatActivity {
             calendarGrid.addView(emptyView);
         }
 
-        SharedPreferences prefs = getSharedPreferences("AttendanceStore", MODE_PRIVATE);
         SimpleDateFormat dateKeyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.US);
 
         for (int day = 1; day <= totalDays; day++) {
@@ -245,70 +270,66 @@ public class StudentAttendanceActivity extends AppCompatActivity {
 
             cal.set(Calendar.DAY_OF_MONTH, day);
             int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
-
+            boolean isWeekend = (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY);
             boolean isToday = (currentYear == todayYear && currentMonth == todayMonth && day == todayDay);
-            boolean isFuture = false;
-
-            if (currentYear > todayYear) {
-                isFuture = true;
-            } else if (currentYear == todayYear) {
-                if (currentMonth > todayMonth) {
-                    isFuture = true;
-                } else if (currentMonth == todayMonth) {
-                    if (day > todayDay) {
-                        isFuture = true;
-                    }
-                }
-            }
 
             String dateKeyStr = dateKeyFmt.format(cal.getTime());
-            String dbStatus = repository.getAttendanceStatus(studentId, dateKeyStr);
-            String savedStatus = dbStatus != null ? dbStatus : prefs.getString("status_" + studentId + "_" + dateKeyStr, null);
-
-            String status;
-
-            if (isFuture) {
-                if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) {
-                    status = "Upcoming Weekend";
-                    dayView.setTextColor(Color.parseColor("#9299AA"));
-                    dayView.setBackgroundResource(R.drawable.action_card);
-                } else {
-                    status = "Upcoming Day";
-                    dayView.setTextColor(Color.parseColor("#68738A"));
-                    dayView.setBackgroundResource(R.drawable.action_card);
-                }
-            } else {
-                if (dayOfWeek == Calendar.SUNDAY || dayOfWeek == Calendar.SATURDAY) {
-                    status = "Holiday (Weekend)";
-                    dayView.setTextColor(Color.parseColor("#7A8294"));
-                    dayView.setBackgroundResource(R.drawable.bg_day_holiday);
-                } else if ("Present".equalsIgnoreCase(savedStatus)) {
-                    status = "Present";
-                    dayView.setTextColor(Color.parseColor("#10B23E"));
-                    dayView.setBackgroundResource(R.drawable.bg_day_present);
-                } else if ("Absent".equalsIgnoreCase(savedStatus)) {
-                    status = "Absent";
-                    dayView.setTextColor(Color.parseColor("#D94343"));
-                    dayView.setBackgroundResource(R.drawable.bg_day_absent);
-                } else {
-                    // Not Marked in DB yet: White card cell!
-                    status = "Not Marked";
-                    dayView.setTextColor(Color.parseColor("#18233F"));
-                    dayView.setBackgroundResource(R.drawable.action_card);
-                }
-            }
-
-            if (isToday) {
-                dayView.setBackgroundResource(R.drawable.bg_day_today);
-            }
-
-            final String finalStatus = status;
             SimpleDateFormat daySdf = new SimpleDateFormat("MMMM d, yyyy", Locale.getDefault());
             String dateStr = daySdf.format(cal.getTime());
 
+            // Default style: Grey Holiday / Unmarked Background or Blue Today Highlight
+            if (isToday) {
+                dayView.setTextColor(Color.parseColor("#4935B8"));
+                dayView.setBackgroundResource(R.drawable.bg_day_today);
+            } else {
+                dayView.setTextColor(Color.parseColor("#7A8294"));
+                dayView.setBackgroundResource(R.drawable.bg_day_holiday);
+            }
+
+            final String[] statusMessage = {isWeekend ? "Weekend Holiday" : "Not Mentioned"};
+
             dayView.setOnClickListener(v ->
-                    Toast.makeText(this, dateStr + "\nStatus: " + finalStatus, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, dateStr + "\nStatus: " + statusMessage[0], Toast.LENGTH_SHORT).show()
             );
+
+            if (isWeekend) {
+                // Saturday and Sunday are Weekend Holidays
+                statusMessage[0] = "Weekend Holiday";
+                dayView.setTextColor(Color.parseColor("#7A8294"));
+                dayView.setBackgroundResource(isToday ? R.drawable.bg_day_today : R.drawable.bg_day_holiday);
+            } else {
+                // Fetch live status for weekday from Neon PostgreSQL
+                repository.getAttendanceStatus(studentId, dateKeyStr, new TrackPointRepository.RepositoryCallback<AttendanceDto>() {
+                    @Override
+                    public void onSuccess(AttendanceDto attendance) {
+                        if (attendance != null && attendance.getStatus() != null) {
+                            String liveStatus = attendance.getStatus();
+                            if ("Present".equalsIgnoreCase(liveStatus)) {
+                                statusMessage[0] = "Present";
+                                dayView.setTextColor(Color.parseColor("#10B23E"));
+                                dayView.setBackgroundResource(isToday ? R.drawable.bg_day_today_present : R.drawable.bg_day_present);
+                            } else if ("Absent".equalsIgnoreCase(liveStatus)) {
+                                statusMessage[0] = "Absent";
+                                dayView.setTextColor(Color.parseColor("#D94343"));
+                                dayView.setBackgroundResource(isToday ? R.drawable.bg_day_today_absent : R.drawable.bg_day_absent);
+                            } else {
+                                statusMessage[0] = "Not Mentioned";
+                                dayView.setTextColor(isToday ? Color.parseColor("#4935B8") : Color.parseColor("#7A8294"));
+                                dayView.setBackgroundResource(isToday ? R.drawable.bg_day_today : R.drawable.bg_day_holiday);
+                            }
+                        } else {
+                            statusMessage[0] = "Not Mentioned";
+                            dayView.setTextColor(isToday ? Color.parseColor("#4935B8") : Color.parseColor("#7A8294"));
+                            dayView.setBackgroundResource(isToday ? R.drawable.bg_day_today : R.drawable.bg_day_holiday);
+                        }
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        statusMessage[0] = "Not Mentioned";
+                    }
+                });
+            }
 
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = 0;

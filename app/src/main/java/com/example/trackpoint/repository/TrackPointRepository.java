@@ -16,6 +16,7 @@ import com.example.trackpoint.network.dto.StudentAdminDto;
 import com.example.trackpoint.network.dto.StudentDto;
 import com.example.trackpoint.network.dto.SuperAdminDto;
 
+import java.util.ArrayList;
 import java.util.List;
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -293,6 +294,24 @@ public class TrackPointRepository {
 
     // --- ATTENDANCE ---
 
+    public void getAttendanceForStudent(String regNo, RepositoryCallback<List<AttendanceDto>> callback) {
+        apiService.getAttendanceForStudent(regNo).enqueue(new Callback<List<AttendanceDto>>() {
+            @Override
+            public void onResponse(Call<List<AttendanceDto>> call, Response<List<AttendanceDto>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    if (callback != null) callback.onSuccess(response.body());
+                } else {
+                    if (callback != null) callback.onSuccess(new ArrayList<>());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<AttendanceDto>> call, Throwable t) {
+                if (callback != null) callback.onError(new Exception(t));
+            }
+        });
+    }
+
     public void getAttendanceStatus(String regNo, String dateKey, RepositoryCallback<AttendanceDto> callback) {
         apiService.getAttendanceStatus(regNo, dateKey).enqueue(new Callback<AttendanceDto>() {
             @Override
@@ -384,6 +403,31 @@ public class TrackPointRepository {
 
             @Override
             public void onFailure(Call<DailyActivityDto> call, Throwable t) {
+                if (callback != null) callback.onError(new Exception(t));
+            }
+        });
+    }
+
+    public void getDailyActivitiesForStudent(String studentRegNo, RepositoryCallback<List<DailyActivityDto>> callback) {
+        apiService.getDailyActivitiesForStudent(studentRegNo).enqueue(new Callback<List<DailyActivityDto>>() {
+            @Override
+            public void onResponse(Call<List<DailyActivityDto>> call, Response<List<DailyActivityDto>> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    List<DailyActivityDto> list = response.body();
+                    for (DailyActivityDto activity : list) {
+                        if (activity.getFileKey() != null && !activity.getFileKey().isEmpty()) {
+                            String freshPresignedUrl = s3Manager.generatePresignedUrl(activity.getFileKey(), 60);
+                            activity.setFileUrl(freshPresignedUrl);
+                        }
+                    }
+                    if (callback != null) callback.onSuccess(list);
+                } else {
+                    if (callback != null) callback.onSuccess(new ArrayList<>());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<List<DailyActivityDto>> call, Throwable t) {
                 if (callback != null) callback.onError(new Exception(t));
             }
         });

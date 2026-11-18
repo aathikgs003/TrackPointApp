@@ -107,6 +107,9 @@ public interface TrackPointApiService {
     Call<Void> deleteStudent(@Path("regNo") String regNo);
 
     // --- Attendance ---
+    @GET("api/attendance/student/{regNo}")
+    Call<List<AttendanceDto>> getAttendanceForStudent(@Path("regNo") String regNo);
+
     @GET("api/attendance/{regNo}/{dateKey}")
     Call<AttendanceDto> getAttendanceStatus(@Path("regNo") String regNo, @Path("dateKey") String dateKey);
 
@@ -117,6 +120,9 @@ public interface TrackPointApiService {
     Call<Void> recordAttendanceBatch(@Body List<AttendanceDto> records);
 
     // --- Daily Activities (Integrated with Backblaze B2 S3 Object Keys & Neon) ---
+    @GET("api/activities/student/{regNo}")
+    Call<List<DailyActivityDto>> getDailyActivitiesForStudent(@Path("regNo") String regNo);
+
     @GET("api/activities/{regNo}/{dateKey}")
     Call<DailyActivityDto> getDailyActivity(@Path("regNo") String regNo, @Path("dateKey") String dateKey);
 

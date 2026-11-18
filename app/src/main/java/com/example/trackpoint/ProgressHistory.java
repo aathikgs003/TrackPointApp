@@ -16,10 +16,17 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.DailyActivityDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class ProgressHistory extends AppCompatActivity {
 
@@ -29,15 +36,18 @@ public class ProgressHistory extends AppCompatActivity {
     LinearLayout layoutProgressContent;
 
     Calendar filterCalendar;
-    StudentRepository repository;
+    TrackPointRepository repository;
     String loggedInAdminName = "Aathi";
+
+    List<StudentDto> loadedAssignedStudents = new ArrayList<>();
+    private int currentRenderRequestId = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_progress_history);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInAdminName = sessionPrefs.getString("logged_in_admin_name", "Aathi");
@@ -49,15 +59,6 @@ public class ProgressHistory extends AppCompatActivity {
         layoutProgressContent = findViewById(R.id.layoutProgressContent);
 
         btnBack.setOnClickListener(v -> finish());
-
-        ArrayList<StudentModel> assignedStudents = repository.searchAndFilterStudentsForAdmin("", "All Departments", "All Years", loggedInAdminName);
-        ArrayList<String> studentNames = new ArrayList<>();
-        studentNames.add("All Assigned Students");
-        for (StudentModel s : assignedStudents) {
-            studentNames.add(s.getName());
-        }
-
-        setSpinner(spStudent, studentNames.toArray(new String[0]));
 
         filterCalendar = Calendar.getInstance();
         updateDateDisplay();
@@ -74,13 +75,50 @@ public class ProgressHistory extends AppCompatActivity {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        renderProgressResults();
+        loadAssignedStudentsFromNeon();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        renderProgressResults();
+        loadAssignedStudentsFromNeon();
+    }
+
+    private void loadAssignedStudentsFromNeon() {
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> studentList) {
+                loadedAssignedStudents.clear();
+                Set<String> seenRegNos = new HashSet<>();
+                ArrayList<String> studentNames = new ArrayList<>();
+                studentNames.add("All Assigned Students");
+
+                if (studentList != null) {
+                    for (StudentDto s : studentList) {
+                        String regNo = s.getRegisterNumber();
+                        if (regNo != null && !seenRegNos.contains(regNo.toLowerCase())) {
+                            boolean isAssigned = s.getAssignedAdmin() == null ||
+                                    s.getAssignedAdmin().equalsIgnoreCase(loggedInAdminName) ||
+                                    loggedInAdminName.equalsIgnoreCase("Aathi");
+
+                            if (isAssigned) {
+                                seenRegNos.add(regNo.toLowerCase());
+                                loadedAssignedStudents.add(s);
+                                studentNames.add(s.getName());
+                            }
+                        }
+                    }
+                }
+
+                setSpinner(spStudent, studentNames.toArray(new String[0]));
+                renderProgressResults();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                renderProgressResults();
+            }
+        });
     }
 
     private void updateDateDisplay() {
@@ -112,6 +150,9 @@ public class ProgressHistory extends AppCompatActivity {
         if (layoutProgressContent == null) return;
         layoutProgressContent.removeAllViews();
 
+        final int requestId = ++currentRenderRequestId;
+        final Set<String> renderedStudentRegs = new HashSet<>();
+
         SimpleDateFormat keyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.getDefault());
         SimpleDateFormat displayFmt = new SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault());
 
@@ -123,11 +164,10 @@ public class ProgressHistory extends AppCompatActivity {
         }
 
         String selectedStudent = spStudent.getSelectedItem() != null ? spStudent.getSelectedItem().toString() : "All Assigned Students";
-        ArrayList<StudentModel> assignedStudents = repository.searchAndFilterStudentsForAdmin("", "All Departments", "All Years", loggedInAdminName);
 
-        if (assignedStudents.isEmpty()) {
+        if (loadedAssignedStudents.isEmpty()) {
             TextView emptyView = new TextView(this);
-            emptyView.setText("No students assigned to " + loggedInAdminName + " in database");
+            emptyView.setText("No students assigned to " + loggedInAdminName + " in Neon database");
             emptyView.setPadding(16, 32, 16, 32);
             emptyView.setGravity(android.view.Gravity.CENTER);
             emptyView.setTextColor(android.graphics.Color.parseColor("#68738A"));
@@ -135,40 +175,44 @@ public class ProgressHistory extends AppCompatActivity {
             return;
         }
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        int renderedCount = 0;
-
-        for (StudentModel s : assignedStudents) {
+        for (StudentDto s : loadedAssignedStudents) {
             if (!selectedStudent.equals("All Assigned Students") && !s.getName().equalsIgnoreCase(selectedStudent)) {
                 continue;
             }
 
-            DailyActivityModel dbModel = repository.getDailyActivity(s.getRegisterNumber(), dateKey);
-            boolean isSubmitted = (dbModel != null) || prefs.getBoolean("submitted_" + s.getRegisterNumber() + "_" + dateKey, false);
+            final String regNo = s.getRegisterNumber();
 
-            String fileName = dbModel != null ? dbModel.getFileName() : prefs.getString("file_name_" + s.getRegisterNumber() + "_" + dateKey, "No File Uploaded");
-            String notes = dbModel != null ? dbModel.getNotes() : prefs.getString("notes_" + s.getRegisterNumber() + "_" + dateKey, "No activity document or description submitted for this date.");
-            String timeStr = dbModel != null ? dbModel.getSubmitTime() : prefs.getString("submit_time_" + s.getRegisterNumber() + "_" + dateKey, "Not Submitted");
+            // Query Neon PostgreSQL database table daily_activities for this student and date
+            repository.getDailyActivity(regNo, dateKey, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+                @Override
+                public void onSuccess(DailyActivityDto activity) {
+                    if (requestId != currentRenderRequestId) return;
+                    if (renderedStudentRegs.contains(regNo.toLowerCase())) return;
 
-            if (isSubmitted) {
-                layoutProgressContent.addView(createStudentUploadCard(s, dateDisplay, fileName, notes, timeStr, true));
-            } else {
-                layoutProgressContent.addView(createStudentUploadCard(s, dateDisplay, "No File Uploaded", "No activity document or description submitted for this date.", "Not Submitted", false));
-            }
-            renderedCount++;
-        }
+                    renderedStudentRegs.add(regNo.toLowerCase());
 
-        if (renderedCount == 0) {
-            TextView emptyView = new TextView(this);
-            emptyView.setText("No progress records found for selected filter");
-            emptyView.setPadding(16, 32, 16, 32);
-            emptyView.setGravity(android.view.Gravity.CENTER);
-            emptyView.setTextColor(android.graphics.Color.parseColor("#68738A"));
-            layoutProgressContent.addView(emptyView);
+                    boolean isSubmitted = activity != null && ((activity.getFileName() != null && !activity.getFileName().isEmpty()) || (activity.getNotes() != null && !activity.getNotes().isEmpty()));
+
+                    String fileName = activity != null && activity.getFileName() != null && !activity.getFileName().isEmpty() ? activity.getFileName() : "No File Uploaded";
+                    String notes = activity != null && activity.getNotes() != null ? activity.getNotes() : "No activity document or description submitted for this date.";
+                    String timeStr = activity != null && activity.getSubmitTime() != null ? activity.getSubmitTime() : "Not Submitted";
+
+                    layoutProgressContent.addView(createStudentUploadCard(s, dateDisplay, fileName, notes, timeStr, isSubmitted));
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    if (requestId != currentRenderRequestId) return;
+                    if (renderedStudentRegs.contains(regNo.toLowerCase())) return;
+
+                    renderedStudentRegs.add(regNo.toLowerCase());
+                    layoutProgressContent.addView(createStudentUploadCard(s, dateDisplay, "No File Uploaded", "No activity document or description submitted for this date.", "Not Submitted", false));
+                }
+            });
         }
     }
 
-    private View createStudentUploadCard(StudentModel student, String dateStr, String fileName, String notesStr, String timeStr, boolean isSubmitted) {
+    private View createStudentUploadCard(StudentDto student, String dateStr, String fileName, String notesStr, String timeStr, boolean isSubmitted) {
         View card = LayoutInflater.from(this).inflate(R.layout.item_report_card, layoutProgressContent, false);
 
         TextView tvDate = card.findViewById(R.id.tvReportCardDate);
