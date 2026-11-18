@@ -10,14 +10,17 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class StudentDetailsActivity extends AppCompatActivity {
 
     ImageView btnBack;
     TextView tvStudentName, tvRollNumber, tvDepartment, tvYear, tvEmail, tvPhone;
     Button btnEditStudent, btnDeleteStudent;
 
-    StudentRepository repository;
-    StudentModel currentStudent;
+    TrackPointRepository repository;
+    StudentDto currentStudent;
     String rollNoParam;
 
     @Override
@@ -25,7 +28,7 @@ public class StudentDetailsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_details);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         btnBack = findViewById(R.id.btnBack);
         tvStudentName = findViewById(R.id.tvStudentName);
@@ -65,40 +68,58 @@ public class StudentDetailsActivity extends AppCompatActivity {
     }
 
     private void loadStudentDetails() {
-        if (rollNoParam != null && !rollNoParam.isEmpty()) {
-            currentStudent = repository.getStudentByRegNo(rollNoParam);
-        }
+        if (rollNoParam == null || rollNoParam.isEmpty()) return;
 
-        Intent intent = getIntent();
-        if (currentStudent == null && intent != null) {
-            String name = intent.getStringExtra("student_name");
-            String rollNo = intent.getStringExtra("student_roll_no");
-            if (rollNo == null) rollNo = intent.getStringExtra("student_reg_no");
-            String dept = intent.getStringExtra("student_dept");
-            String year = intent.getStringExtra("student_year");
-            String email = intent.getStringExtra("student_email");
-            String phone = intent.getStringExtra("student_phone");
-
-            if (name != null) {
-                currentStudent = new StudentModel(
-                        name,
-                        rollNo != null ? rollNo : "CSE22CS001",
-                        dept != null ? dept : "CSE",
-                        year != null ? year : "III Year",
-                        email != null ? email : "arun@gmail.com",
-                        phone != null ? phone : "98765 43210"
-                );
+        // Fetch live student row from Neon PostgreSQL
+        repository.getStudentByRegNo(rollNoParam, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto s) {
+                if (s != null) {
+                    currentStudent = s;
+                    if (tvStudentName != null) tvStudentName.setText(s.getName());
+                    if (tvRollNumber != null) tvRollNumber.setText(s.getRegisterNumber());
+                    if (tvDepartment != null) tvDepartment.setText(s.getDepartment());
+                    if (tvYear != null) tvYear.setText(s.getYear());
+                    if (tvEmail != null) tvEmail.setText(s.getEmail());
+                    if (tvPhone != null) tvPhone.setText(s.getPhone());
+                }
             }
-        }
 
-        if (currentStudent != null) {
-            if (tvStudentName != null) tvStudentName.setText(currentStudent.getName());
-            if (tvRollNumber != null) tvRollNumber.setText(currentStudent.getRegisterNumber());
-            if (tvDepartment != null) tvDepartment.setText(currentStudent.getDepartment());
-            if (tvYear != null) tvYear.setText(currentStudent.getYear());
-            if (tvEmail != null) tvEmail.setText(currentStudent.getEmail());
-            if (tvPhone != null) tvPhone.setText(currentStudent.getPhone());
-        }
+            @Override
+            public void onError(Exception e) {
+                // Fallback to intent values if network delay occurs
+                Intent intent = getIntent();
+                if (intent != null) {
+                    String name = intent.getStringExtra("student_name");
+                    String rollNo = intent.getStringExtra("student_roll_no");
+                    if (rollNo == null) rollNo = intent.getStringExtra("student_reg_no");
+                    String dept = intent.getStringExtra("student_dept");
+                    String year = intent.getStringExtra("student_year");
+                    String email = intent.getStringExtra("student_email");
+                    String phone = intent.getStringExtra("student_phone");
+
+                    if (name != null) {
+                        currentStudent = new StudentDto(
+                                name,
+                                rollNo != null ? rollNo : rollNoParam,
+                                dept != null ? dept : "CSE",
+                                year != null ? year : "III Year",
+                                email != null ? email : "",
+                                phone != null ? phone : "",
+                                "123",
+                                "Aathi"
+                        );
+
+                        if (tvStudentName != null) tvStudentName.setText(currentStudent.getName());
+                        if (tvRollNumber != null) tvRollNumber.setText(currentStudent.getRegisterNumber());
+                        if (tvDepartment != null) tvDepartment.setText(currentStudent.getDepartment());
+                        if (tvYear != null) tvYear.setText(currentStudent.getYear());
+                        if (tvEmail != null) tvEmail.setText(currentStudent.getEmail());
+                        if (tvPhone != null) tvPhone.setText(currentStudent.getPhone());
+                    }
+                }
+            }
+        });
     }
 
     private void openEditStudentScreen() {
@@ -118,15 +139,20 @@ public class StudentDetailsActivity extends AppCompatActivity {
 
         new AlertDialog.Builder(this)
                 .setTitle("Delete Student")
-                .setMessage("Are you sure you want to delete " + currentStudent.getName() + " (" + currentStudent.getRegisterNumber() + ") from the database?")
+                .setMessage("Are you sure you want to delete " + currentStudent.getName() + " (" + currentStudent.getRegisterNumber() + ") from Neon database?")
                 .setPositiveButton("Yes, Delete", (dialog, which) -> {
-                    boolean deleted = repository.deleteStudentByRegNo(currentStudent.getRegisterNumber());
-                    if (deleted) {
-                        Toast.makeText(this, "Student " + currentStudent.getName() + " deleted successfully!", Toast.LENGTH_SHORT).show();
-                        finish();
-                    } else {
-                        Toast.makeText(this, "Failed to delete student", Toast.LENGTH_SHORT).show();
-                    }
+                    repository.deleteStudent(currentStudent.getRegisterNumber(), new TrackPointRepository.RepositoryCallback<Void>() {
+                        @Override
+                        public void onSuccess(Void result) {
+                            Toast.makeText(StudentDetailsActivity.this, "Student " + currentStudent.getName() + " deleted from Neon database!", Toast.LENGTH_SHORT).show();
+                            finish();
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            Toast.makeText(StudentDetailsActivity.this, "Failed to delete student from Neon: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    });
                 })
                 .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
                 .show();

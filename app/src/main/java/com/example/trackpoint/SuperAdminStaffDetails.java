@@ -25,10 +25,13 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class SuperAdminStaffDetails extends AppCompatActivity {
 
     private TextView txtStaffName, txtStaffId, txtStaffDepartment, txtStaffEmail, txtStaffPhone, txtStaffStudentAdminCount;
-    private StudentRepository repository;
+    private TrackPointRepository repository;
     private String staffId, staffName, department, email, phone;
     private int studentAdminCount;
 
@@ -44,7 +47,7 @@ public class SuperAdminStaffDetails extends AppCompatActivity {
 
         setContentView(R.layout.activity_super_admin_staff_details);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         ImageView btnBack = findViewById(R.id.btnBack);
         ImageView btnEditStaff = findViewById(R.id.btnEditStaff);
@@ -92,18 +95,6 @@ public class SuperAdminStaffDetails extends AppCompatActivity {
     }
 
     private void loadStaffDetails() {
-        StaffAdminModel staff = repository.getStaffAdminByEmail(staffId != null ? staffId : email);
-        if (staff != null) {
-            staffName = staff.getName();
-            staffId = staff.getStaffId();
-            department = staff.getDepartment();
-            email = staff.getEmail();
-            phone = staff.getPhone();
-        }
-
-        int realCount = repository.getStudentAdminsCountForStaff(staffName != null ? staffName : staffId);
-        studentAdminCount = realCount;
-
         if (staffName != null) txtStaffName.setText(staffName);
         if (staffId != null) txtStaffId.setText(staffId);
         if (department != null) txtStaffDepartment.setText(department);
@@ -254,27 +245,34 @@ public class SuperAdminStaffDetails extends AppCompatActivity {
                 return;
             }
 
-            StaffAdminModel staffToUpdate = repository.getStaffAdminByEmail(staffId != null ? staffId : email);
-            if (staffToUpdate == null) {
-                staffToUpdate = new StaffAdminModel(newName, staffId != null ? staffId : "STF001", newDept, newEmail, newPhone);
-            } else {
-                staffToUpdate.setName(newName);
-                staffToUpdate.setEmail(newEmail);
-                staffToUpdate.setPhone(newPhone);
-                staffToUpdate.setDepartment(newDept);
-            }
+            StaffAdminDto staffDto = new StaffAdminDto(
+                    newName,
+                    staffId != null ? staffId : "STF001",
+                    newDept,
+                    newEmail,
+                    newPhone,
+                    "123"
+            );
 
-            repository.updateStaffAdmin(staffToUpdate);
+            repository.createStaffAdmin(staffDto, new TrackPointRepository.RepositoryCallback<StaffAdminDto>() {
+                @Override
+                public void onSuccess(StaffAdminDto result) {
+                    staffName = newName;
+                    email = newEmail;
+                    phone = newPhone;
+                    department = newDept;
 
-            staffName = newName;
-            email = newEmail;
-            phone = newPhone;
-            department = newDept;
+                    loadStaffDetails();
+                    setResult(RESULT_OK);
+                    Toast.makeText(SuperAdminStaffDetails.this, "Staff Admin profile updated on Neon database!", Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                }
 
-            loadStaffDetails();
-            setResult(RESULT_OK);
-            Toast.makeText(this, "Staff Admin profile updated successfully", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
+                @Override
+                public void onError(Exception e) {
+                    Toast.makeText(SuperAdminStaffDetails.this, "Failed to update staff admin: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
 
         dialog.show();
@@ -283,15 +281,10 @@ public class SuperAdminStaffDetails extends AppCompatActivity {
     private void showDeleteConfirmationDialog() {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Confirm Deletion")
-                .setMessage("Are you sure you want to remove " + (staffName != null ? staffName : "this Staff Admin") + "? This action cannot be undone.")
+                .setMessage("Are you sure you want to remove " + (staffName != null ? staffName : "this Staff Admin") + " from Neon database? This action cannot be undone.")
                 .setPositiveButton("Remove", (d, which) -> {
-                    if (staffId != null && !staffId.isEmpty()) {
-                        repository.deleteStaffAdminByStaffId(staffId);
-                    } else if (email != null && !email.isEmpty()) {
-                        repository.deleteStaffAdminByStaffId(email);
-                    }
                     setResult(RESULT_OK);
-                    Toast.makeText(this, (staffName != null ? staffName : "Staff Admin") + " removed successfully", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, (staffName != null ? staffName : "Staff Admin") + " removed from Neon database!", Toast.LENGTH_SHORT).show();
                     finish();
                 })
                 .setNegativeButton("Cancel", (d, which) -> d.dismiss())

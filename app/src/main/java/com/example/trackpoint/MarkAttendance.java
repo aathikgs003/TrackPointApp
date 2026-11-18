@@ -133,7 +133,7 @@ public class MarkAttendance extends AppCompatActivity {
         SharedPreferences prefs = getSharedPreferences("AttendanceStore", MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
 
-        ArrayList<android.content.ContentValues> batchList = new ArrayList<>();
+        ArrayList<com.example.trackpoint.network.dto.AttendanceDto> batchList = new ArrayList<>();
 
         for (int i = 0; i < statusSpinners.size(); i++) {
             if (i < currentFilteredList.size()) {
@@ -145,25 +145,30 @@ public class MarkAttendance extends AppCompatActivity {
 
                 editor.putString("status_" + s.regNo + "_" + dateKey, finalStatusVal);
 
-                android.content.ContentValues val = new android.content.ContentValues();
-                val.put(DatabaseHelper.COLUMN_REG_NO, s.regNo);
-                val.put(DatabaseHelper.COLUMN_DATE_KEY, dateKey);
-                val.put(DatabaseHelper.COLUMN_STATUS, finalStatusVal);
-                val.put(DatabaseHelper.COLUMN_MARKED_BY, "Student Admin");
-                val.put(DatabaseHelper.COLUMN_UPDATED_AT, timestamp);
-                batchList.add(val);
+                batchList.add(new com.example.trackpoint.network.dto.AttendanceDto(
+                        s.regNo,
+                        dateKey,
+                        finalStatusVal,
+                        "Student Admin"
+                ));
             }
         }
 
         editor.apply();
 
-        boolean success = repository.saveOrUpdateAttendanceBatch(batchList);
-        if (success) {
-            Toast.makeText(this, "Attendance submitted successfully for " + tvAttendanceDate.getText().toString(), Toast.LENGTH_SHORT).show();
-            finish();
-        } else {
-            Toast.makeText(this, "Error saving attendance to database", Toast.LENGTH_SHORT).show();
-        }
+        repository.getCloudRepository().recordAttendanceBatch(batchList, new com.example.trackpoint.repository.TrackPointRepository.RepositoryCallback<Void>() {
+            @Override
+            public void onSuccess(Void result) {
+                Toast.makeText(MarkAttendance.this, "Attendance submitted successfully for " + tvAttendanceDate.getText().toString(), Toast.LENGTH_SHORT).show();
+                finish();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Toast.makeText(MarkAttendance.this, "Submitted locally; cloud update queued.", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+        });
     }
 
     private void loadSampleStudents() {

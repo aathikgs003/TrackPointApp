@@ -1,8 +1,5 @@
 package com.example.trackpoint;
 
-import android.content.ContentValues;
-import android.database.Cursor;
-
 public class StudentModel {
 
     private long id;
@@ -177,54 +174,5 @@ public class StudentModel {
 
     public void setUpdatedAt(String updatedAt) {
         this.updatedAt = updatedAt;
-    }
-
-    public ContentValues toContentValues() {
-        ContentValues values = new ContentValues();
-        values.put(DatabaseHelper.COLUMN_NAME, name);
-        values.put(DatabaseHelper.COLUMN_REG_NO, registerNumber);
-        values.put(DatabaseHelper.COLUMN_DEPT, department);
-        values.put(DatabaseHelper.COLUMN_YEAR, year);
-        values.put(DatabaseHelper.COLUMN_EMAIL, email);
-        values.put(DatabaseHelper.COLUMN_PHONE, phone);
-        values.put(DatabaseHelper.COLUMN_PASSWORD, password != null ? password : "123");
-        values.put(DatabaseHelper.COLUMN_ASSIGNED_ADMIN, assignedAdmin != null ? assignedAdmin : "Aathi");
-        values.put(DatabaseHelper.COLUMN_SERVER_ID, serverId != null ? serverId : "");
-        values.put(DatabaseHelper.COLUMN_IS_SYNCED, isSynced ? 1 : 0);
-        values.put(DatabaseHelper.COLUMN_UPDATED_AT, updatedAt != null ? updatedAt : "");
-        return values;
-    }
-
-    public static StudentModel fromCursor(Cursor cursor) {
-        if (cursor == null) return null;
-
-        long id = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_ID));
-        String name = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_NAME));
-        String registerNumber = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_REG_NO));
-        String department = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_DEPT));
-        String year = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_YEAR));
-
-        int emailIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_EMAIL);
-        String email = emailIdx != -1 ? cursor.getString(emailIdx) : "";
-
-        int phoneIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_PHONE);
-        String phone = phoneIdx != -1 ? cursor.getString(phoneIdx) : "";
-
-        int passIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_PASSWORD);
-        String password = passIdx != -1 ? cursor.getString(passIdx) : "123";
-
-        int adminIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_ASSIGNED_ADMIN);
-        String assignedAdmin = adminIdx != -1 ? cursor.getString(adminIdx) : "Aathi";
-
-        int serverIdIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_SERVER_ID);
-        String serverId = serverIdIdx != -1 ? cursor.getString(serverIdIdx) : "";
-
-        int syncIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_IS_SYNCED);
-        boolean isSynced = syncIdx != -1 && cursor.getInt(syncIdx) == 1;
-
-        int updatedIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_UPDATED_AT);
-        String updatedAt = updatedIdx != -1 ? cursor.getString(updatedIdx) : "";
-
-        return new StudentModel(id, name, registerNumber, department, year, email, phone, password, assignedAdmin, serverId, isSynced, updatedAt);
     }
 }

@@ -16,13 +16,16 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class AddStudentAdmin extends AppCompatActivity {
 
     EditText etAdminName, etAdminId, etAdminEmail, etAdminPhone;
     Spinner spAdminDepartment, spAdminYear;
     Button btnSaveAdmin;
     ImageView btnBack;
-    StudentRepository repository;
+    TrackPointRepository repository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,7 +39,7 @@ public class AddStudentAdmin extends AppCompatActivity {
 
         setContentView(R.layout.activity_add_student_admin);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         etAdminName = findViewById(R.id.etAdminName);
         etAdminId = findViewById(R.id.etAdminId);
@@ -119,45 +122,50 @@ public class AddStudentAdmin extends AppCompatActivity {
                 return;
             }
 
-            if (repository.adminIdExists(id)) {
-                Toast.makeText(this, "Admin ID already exists in database!", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
             String dept = spAdminDepartment.getSelectedItem().toString();
             String year = spAdminYear.getSelectedItem().toString();
 
             android.content.SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
-            String loggedInStaffName = sessionPrefs.getString("logged_in_staff_name", "Suruthika S");
+            String loggedInStaffName = sessionPrefs.getString("logged_in_staff_name", "Suruthika J");
 
-            StudentAdminModel newAdmin = new StudentAdminModel(
+            btnSaveAdmin.setEnabled(false);
+
+            StudentAdminDto newAdmin = new StudentAdminDto(
                     name,
                     id,
                     dept,
                     year,
                     email,
                     phone.startsWith("+91") ? phone : "+91 " + phone,
+                    "123",
+                    0,
                     loggedInStaffName
             );
-            newAdmin.setStudentsAssignedCount(0);
 
-            long rowId = repository.addStudentAdmin(newAdmin);
-            if (rowId > 0) {
-                Intent resultIntent = new Intent();
-                resultIntent.putExtra("adminName", name);
-                resultIntent.putExtra("adminId", id);
-                resultIntent.putExtra("department", dept);
-                resultIntent.putExtra("year", year);
-                resultIntent.putExtra("phone", phone);
-                resultIntent.putExtra("email", email);
-                resultIntent.putExtra("studentCount", 0);
-                setResult(RESULT_OK, resultIntent);
+            repository.createStudentAdmin(newAdmin, new TrackPointRepository.RepositoryCallback<StudentAdminDto>() {
+                @Override
+                public void onSuccess(StudentAdminDto result) {
+                    btnSaveAdmin.setEnabled(true);
+                    Intent resultIntent = new Intent();
+                    resultIntent.putExtra("adminName", name);
+                    resultIntent.putExtra("adminId", id);
+                    resultIntent.putExtra("department", dept);
+                    resultIntent.putExtra("year", year);
+                    resultIntent.putExtra("phone", phone);
+                    resultIntent.putExtra("email", email);
+                    resultIntent.putExtra("studentCount", 0);
+                    setResult(RESULT_OK, resultIntent);
 
-                Toast.makeText(this, "Student Admin " + name + " saved to database!", Toast.LENGTH_SHORT).show();
-                finish();
-            } else {
-                Toast.makeText(this, "Failed to save Student Admin to database", Toast.LENGTH_SHORT).show();
-            }
+                    Toast.makeText(AddStudentAdmin.this, "Student Admin " + name + " saved to Neon database!", Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    btnSaveAdmin.setEnabled(true);
+                    Toast.makeText(AddStudentAdmin.this, "Failed to save Student Admin: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
     }
 }

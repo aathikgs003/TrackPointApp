@@ -8,14 +8,15 @@ public class S3Config {
 
     public static String ENDPOINT = "https://s3.us-east-005.backblazeb2.com";
     public static String REGION = "us-east-005";
-    public static String ACCESS_KEY_ID = "0051269645c6ad00000000001";
-    public static String SECRET_ACCESS_KEY = "K005shOEwSiMuA3ZH3qsu7v1OYD+/Sw";
+    public static String ACCESS_KEY_ID = "0051269645c6ad00000000002";
+    public static String SECRET_ACCESS_KEY = "K005AEnnRDFdV3VeNDt+GO9A0VMnLUI";
     public static String BUCKET_NAME = "trackpoint-data";
+    public static String API_BASE_URL = "http://10.11.13.215:5000/";
 
     private static boolean isInitialized = false;
 
     public static synchronized void init(Context context) {
-        if (isInitialized || context == null) return;
+        if (context == null) return;
 
         try (InputStream inputStream = context.getAssets().open(".env")) {
             Properties properties = new Properties();
@@ -44,6 +45,14 @@ public class S3Config {
             String bucket = properties.getProperty("AWS_S3_BUCKET_NAME");
             if (bucket != null && !bucket.isEmpty() && !bucket.contains("<YOUR")) {
                 BUCKET_NAME = bucket.trim();
+            }
+
+            String apiUrl = properties.getProperty("API_BASE_URL");
+            if (apiUrl != null && !apiUrl.isEmpty() && !apiUrl.contains("<YOUR")) {
+                API_BASE_URL = apiUrl.trim();
+                if (!API_BASE_URL.endsWith("/")) {
+                    API_BASE_URL += "/";
+                }
             }
 
             isInitialized = true;

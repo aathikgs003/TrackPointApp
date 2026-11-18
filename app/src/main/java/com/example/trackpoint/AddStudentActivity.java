@@ -13,6 +13,9 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class AddStudentActivity extends AppCompatActivity {
 
     TextView tvHeaderTitle;
@@ -20,11 +23,10 @@ public class AddStudentActivity extends AppCompatActivity {
     Spinner spDepartment, spYear;
     Button btnSaveStudent;
     ImageView btnBack;
-    StudentRepository repository;
+    TrackPointRepository repository;
 
     boolean isEditMode = false;
     String rollNoToEdit = null;
-    StudentModel existingStudent = null;
 
     String[] deptItems = new String[]{"Select Department", "CSE", "ECE", "IT", "AI & DS"};
     String[] yearItems = new String[]{"Select Year", "I Year", "II Year", "III Year", "IV Year"};
@@ -34,9 +36,7 @@ public class AddStudentActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_student);
 
-        repository = new StudentRepository(this);
-
-        tvHeaderTitle = findViewById(R.id.header) != null ? ((TextView) findViewById(R.id.header).findViewById(R.id.btnBack).getRootView().findViewById(R.id.header).findViewWithTag("title")) : null;
+        repository = TrackPointRepository.getInstance(this);
 
         etStudentName = findViewById(R.id.etStudentName);
         etRegisterNumber = findViewById(R.id.etRegisterNumber);
@@ -62,19 +62,28 @@ public class AddStudentActivity extends AppCompatActivity {
         }
 
         if (isEditMode && rollNoToEdit != null) {
-            existingStudent = repository.getStudentByRegNo(rollNoToEdit);
-            if (existingStudent != null) {
-                if (etStudentName != null) etStudentName.setText(existingStudent.getName());
-                if (etRegisterNumber != null) {
-                    etRegisterNumber.setText(existingStudent.getRegisterNumber());
-                    etRegisterNumber.setEnabled(false);
-                }
-                if (etStudentEmail != null) etStudentEmail.setText(existingStudent.getEmail());
-                if (etStudentPhone != null) etStudentPhone.setText(existingStudent.getPhone());
+            repository.getStudentByRegNo(rollNoToEdit, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+                @Override
+                public void onSuccess(StudentDto s) {
+                    if (s != null) {
+                        if (etStudentName != null) etStudentName.setText(s.getName());
+                        if (etRegisterNumber != null) {
+                            etRegisterNumber.setText(s.getRegisterNumber());
+                            etRegisterNumber.setEnabled(false);
+                        }
+                        if (etStudentEmail != null) etStudentEmail.setText(s.getEmail());
+                        if (etStudentPhone != null) etStudentPhone.setText(s.getPhone());
 
-                setSpinnerSelection(spDepartment, deptItems, existingStudent.getDepartment());
-                setSpinnerSelection(spYear, yearItems, existingStudent.getYear());
-            }
+                        setSpinnerSelection(spDepartment, deptItems, s.getDepartment());
+                        setSpinnerSelection(spYear, yearItems, s.getYear());
+                    }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    // Ignored
+                }
+            });
 
             if (btnSaveStudent != null) {
                 btnSaveStudent.setText("Update Student");
@@ -108,55 +117,49 @@ public class AddStudentActivity extends AppCompatActivity {
             SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
             String loggedInAdminName = sessionPrefs.getString("logged_in_admin_name", "Aathi");
 
+            btnSaveStudent.setEnabled(false);
+
+            StudentDto studentDto = new StudentDto(
+                    name,
+                    registerNumber,
+                    department,
+                    year,
+                    email,
+                    phone.startsWith("+91") ? phone : "+91 " + phone,
+                    "123",
+                    loggedInAdminName
+            );
+
             if (isEditMode) {
-                if (existingStudent == null) {
-                    existingStudent = repository.getStudentByRegNo(registerNumber);
-                }
-
-                if (existingStudent != null) {
-                    existingStudent.setName(name);
-                    existingStudent.setEmail(email);
-                    existingStudent.setPhone(phone.startsWith("+91") ? phone : "+91 " + phone);
-                    existingStudent.setDepartment(department);
-                    existingStudent.setYear(year);
-
-                    boolean updated = repository.updateStudent(existingStudent);
-                    if (updated) {
-                        Toast.makeText(this, "Student " + name + " updated successfully!", Toast.LENGTH_SHORT).show();
+                repository.updateStudent(registerNumber, studentDto, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+                    @Override
+                    public void onSuccess(StudentDto result) {
+                        btnSaveStudent.setEnabled(true);
+                        Toast.makeText(AddStudentActivity.this, "Student " + name + " updated successfully on Neon database!", Toast.LENGTH_SHORT).show();
                         finish();
-                    } else {
-                        Toast.makeText(this, "Failed to update student", Toast.LENGTH_SHORT).show();
                     }
-                } else {
-                    StudentModel updatedStudent = new StudentModel(name, registerNumber, department, year, email, phone.startsWith("+91") ? phone : "+91 " + phone, "123", loggedInAdminName);
-                    repository.addStudent(updatedStudent);
-                    Toast.makeText(this, "Student " + name + " updated successfully!", Toast.LENGTH_SHORT).show();
-                    finish();
-                }
+
+                    @Override
+                    public void onError(Exception e) {
+                        btnSaveStudent.setEnabled(true);
+                        Toast.makeText(AddStudentActivity.this, "Failed to update student: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
             } else { // Add Mode
-                if (repository.registerNumberExists(registerNumber)) {
-                    Toast.makeText(this, "Register Number already exists in database!", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+                repository.createStudent(studentDto, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+                    @Override
+                    public void onSuccess(StudentDto result) {
+                        btnSaveStudent.setEnabled(true);
+                        Toast.makeText(AddStudentActivity.this, "Student " + name + " saved to Neon database!", Toast.LENGTH_SHORT).show();
+                        finish();
+                    }
 
-                StudentModel newStudent = new StudentModel(
-                        name,
-                        registerNumber,
-                        department,
-                        year,
-                        email,
-                        phone.startsWith("+91") ? phone : "+91 " + phone,
-                        "123",
-                        loggedInAdminName
-                );
-
-                long result = repository.addStudent(newStudent);
-                if (result > 0) {
-                    Toast.makeText(this, "Student " + name + " assigned to " + loggedInAdminName + " successfully!", Toast.LENGTH_SHORT).show();
-                    finish();
-                } else {
-                    Toast.makeText(this, "Failed to save student to database", Toast.LENGTH_SHORT).show();
-                }
+                    @Override
+                    public void onError(Exception e) {
+                        btnSaveStudent.setEnabled(true);
+                        Toast.makeText(AddStudentActivity.this, "Failed to save student: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
     }

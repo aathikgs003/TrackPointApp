@@ -1,8 +1,5 @@
 package com.example.trackpoint;
 
-import android.content.ContentValues;
-import android.database.Cursor;
-
 public class DailyActivityModel {
 
     private long id;
@@ -126,50 +123,5 @@ public class DailyActivityModel {
 
     public void setUpdatedAt(String updatedAt) {
         this.updatedAt = updatedAt;
-    }
-
-    public ContentValues toContentValues() {
-        ContentValues values = new ContentValues();
-        values.put(DatabaseHelper.COLUMN_REG_NO, studentRegNo);
-        values.put(DatabaseHelper.COLUMN_DATE_KEY, dateKey);
-        values.put(DatabaseHelper.COLUMN_FILE_NAME, fileName != null ? fileName : "");
-        values.put(DatabaseHelper.COLUMN_FILE_URL, fileUrl != null ? fileUrl : "");
-        values.put(DatabaseHelper.COLUMN_NOTES, notes != null ? notes : "");
-        values.put(DatabaseHelper.COLUMN_SUBMIT_TIME, submitTime != null ? submitTime : "");
-        values.put(DatabaseHelper.COLUMN_STATUS, status != null ? status : "Submitted");
-        values.put(DatabaseHelper.COLUMN_STAFF_REMARK, staffRemark != null ? staffRemark : "");
-        values.put(DatabaseHelper.COLUMN_UPDATED_AT, updatedAt != null ? updatedAt : "");
-        return values;
-    }
-
-    public static DailyActivityModel fromCursor(Cursor cursor) {
-        if (cursor == null) return null;
-
-        long id = cursor.getLong(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_ID));
-        String regNo = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_REG_NO));
-        String dateKey = cursor.getString(cursor.getColumnIndexOrThrow(DatabaseHelper.COLUMN_DATE_KEY));
-
-        int fileIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_FILE_NAME);
-        String fileName = fileIdx != -1 ? cursor.getString(fileIdx) : "";
-
-        int urlIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_FILE_URL);
-        String fileUrl = urlIdx != -1 ? cursor.getString(urlIdx) : "";
-
-        int notesIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_NOTES);
-        String notes = notesIdx != -1 ? cursor.getString(notesIdx) : "";
-
-        int timeIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_SUBMIT_TIME);
-        String submitTime = timeIdx != -1 ? cursor.getString(timeIdx) : "";
-
-        int statusIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_STATUS);
-        String status = statusIdx != -1 ? cursor.getString(statusIdx) : "Submitted";
-
-        int remarkIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_STAFF_REMARK);
-        String staffRemark = remarkIdx != -1 ? cursor.getString(remarkIdx) : "";
-
-        int updatedIdx = cursor.getColumnIndex(DatabaseHelper.COLUMN_UPDATED_AT);
-        String updatedAt = updatedIdx != -1 ? cursor.getString(updatedIdx) : "";
-
-        return new DailyActivityModel(id, regNo, dateKey, fileName, fileUrl, notes, submitTime, status, staffRemark, updatedAt);
     }
 }

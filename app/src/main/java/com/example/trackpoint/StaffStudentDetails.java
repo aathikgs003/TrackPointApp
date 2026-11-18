@@ -25,13 +25,16 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class StaffStudentDetails extends AppCompatActivity {
 
     private ImageView btnBack, btnEditStudent, btnDeleteStudent;
     private TextView txtStudentName, txtStudentId, txtDepartment, txtYear, txtPhone, txtEmail;
     private TextView txtAttendance, txtProgress, txtTasks;
 
-    private StudentRepository repository;
+    private TrackPointRepository repository;
     private String currentStudentId = "CSE22CS001";
     private String currentStudentName = "Arun Kumar";
     private String currentDepartment = "CSE";
@@ -54,7 +57,7 @@ public class StaffStudentDetails extends AppCompatActivity {
 
         setContentView(R.layout.activity_staff_student_details);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         btnBack = findViewById(R.id.btnBack);
         btnEditStudent = findViewById(R.id.btnEditStudent);
@@ -119,38 +122,38 @@ public class StaffStudentDetails extends AppCompatActivity {
     }
 
     private void loadStudentDetails() {
-        StudentModel student = repository.getStudentByRegNo(currentStudentId);
+        repository.getStudentByRegNo(currentStudentId, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+            @Override
+            public void onSuccess(StudentDto student) {
+                if (student != null) {
+                    currentStudentName = student.getName();
+                    currentDepartment = student.getDepartment();
+                    currentYear = student.getYear();
+                    currentPhone = student.getPhone();
+                    currentEmail = student.getEmail();
 
-        if (student != null) {
-            currentStudentName = student.getName();
-            currentDepartment = student.getDepartment();
-            currentYear = student.getYear();
-            currentPhone = student.getPhone();
-            currentEmail = student.getEmail();
+                    if (txtStudentName != null) txtStudentName.setText(student.getName());
+                    if (txtStudentId != null) txtStudentId.setText(student.getRegisterNumber());
+                    if (txtDepartment != null) txtDepartment.setText(student.getDepartment());
+                    if (txtYear != null) txtYear.setText(student.getYear());
+                    if (txtPhone != null) txtPhone.setText(student.getPhone());
+                    if (txtEmail != null) txtEmail.setText(student.getEmail());
+                    if (txtAttendance != null) txtAttendance.setText("95%");
+                    if (txtProgress != null) txtProgress.setText("90%");
+                    if (txtTasks != null) txtTasks.setText("1");
+                }
+            }
 
-            if (txtStudentName != null) txtStudentName.setText(student.getName());
-            if (txtStudentId != null) txtStudentId.setText(student.getRegisterNumber());
-            if (txtDepartment != null) txtDepartment.setText(student.getDepartment());
-            if (txtYear != null) txtYear.setText(student.getYear());
-            if (txtPhone != null) txtPhone.setText(student.getPhone());
-            if (txtEmail != null) txtEmail.setText(student.getEmail());
-            if (txtAttendance != null) txtAttendance.setText("95%");
-            if (txtProgress != null) txtProgress.setText("90%");
-            if (txtTasks != null) txtTasks.setText("1");
-        } else {
-            Intent intent = getIntent();
-            if (intent != null) {
+            @Override
+            public void onError(Exception e) {
                 if (txtStudentName != null) txtStudentName.setText(currentStudentName);
                 if (txtStudentId != null) txtStudentId.setText(currentStudentId);
                 if (txtDepartment != null) txtDepartment.setText(currentDepartment);
                 if (txtYear != null) txtYear.setText(currentYear);
                 if (txtPhone != null) txtPhone.setText(currentPhone);
                 if (txtEmail != null) txtEmail.setText(currentEmail);
-                if (txtAttendance != null) txtAttendance.setText(intent.getStringExtra("attendance") != null ? intent.getStringExtra("attendance") : "92%");
-                if (txtProgress != null) txtProgress.setText(intent.getStringExtra("progress") != null ? intent.getStringExtra("progress") : "88%");
-                if (txtTasks != null) txtTasks.setText(intent.getStringExtra("tasks") != null ? intent.getStringExtra("tasks") : "5");
             }
-        }
+        });
     }
 
     private void showEditStudentDialog() {
@@ -324,29 +327,37 @@ public class StaffStudentDetails extends AppCompatActivity {
                 return;
             }
 
-            StudentModel studentToUpdate = repository.getStudentByRegNo(currentStudentId);
-            if (studentToUpdate == null) {
-                studentToUpdate = new StudentModel(newName, currentStudentId, newDept, newYear, newEmail, newPhone, "Aathi");
-            } else {
-                studentToUpdate.setName(newName);
-                studentToUpdate.setEmail(newEmail);
-                studentToUpdate.setPhone(newPhone);
-                studentToUpdate.setDepartment(newDept);
-                studentToUpdate.setYear(newYear);
-            }
+            StudentDto studentDto = new StudentDto(
+                    newName,
+                    currentStudentId,
+                    newDept,
+                    newYear,
+                    newEmail,
+                    newPhone,
+                    "123",
+                    "Aathi"
+            );
 
-            repository.updateStudent(studentToUpdate);
+            repository.updateStudent(currentStudentId, studentDto, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+                @Override
+                public void onSuccess(StudentDto result) {
+                    currentStudentName = newName;
+                    currentEmail = newEmail;
+                    currentPhone = newPhone;
+                    currentDepartment = newDept;
+                    currentYear = newYear;
 
-            currentStudentName = newName;
-            currentEmail = newEmail;
-            currentPhone = newPhone;
-            currentDepartment = newDept;
-            currentYear = newYear;
+                    loadStudentDetails();
+                    setResult(RESULT_OK);
+                    Toast.makeText(StaffStudentDetails.this, "Student profile updated on Neon database!", Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                }
 
-            loadStudentDetails();
-            setResult(RESULT_OK);
-            Toast.makeText(this, "Student profile updated successfully", Toast.LENGTH_SHORT).show();
-            dialog.dismiss();
+                @Override
+                public void onError(Exception e) {
+                    Toast.makeText(StaffStudentDetails.this, "Failed to update student: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
 
         dialog.show();
@@ -355,14 +366,23 @@ public class StaffStudentDetails extends AppCompatActivity {
     private void showDeleteConfirmationDialog() {
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Confirm Deletion")
-                .setMessage("Are you sure you want to remove " + (currentStudentName != null ? currentStudentName : "this Student") + "? This action cannot be undone.")
+                .setMessage("Are you sure you want to remove " + (currentStudentName != null ? currentStudentName : "this Student") + " from Neon database? This action cannot be undone.")
                 .setPositiveButton("Remove", (d, which) -> {
                     if (currentStudentId != null && !currentStudentId.isEmpty()) {
-                        repository.deleteStudentByRegNo(currentStudentId);
+                        repository.deleteStudent(currentStudentId, new TrackPointRepository.RepositoryCallback<Void>() {
+                            @Override
+                            public void onSuccess(Void result) {
+                                setResult(RESULT_OK);
+                                Toast.makeText(StaffStudentDetails.this, (currentStudentName != null ? currentStudentName : "Student") + " removed from Neon database!", Toast.LENGTH_SHORT).show();
+                                finish();
+                            }
+
+                            @Override
+                            public void onError(Exception e) {
+                                Toast.makeText(StaffStudentDetails.this, "Failed to delete student: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                            }
+                        });
                     }
-                    setResult(RESULT_OK);
-                    Toast.makeText(this, (currentStudentName != null ? currentStudentName : "Student") + " removed successfully", Toast.LENGTH_SHORT).show();
-                    finish();
                 })
                 .setNegativeButton("Cancel", (d, which) -> d.dismiss())
                 .create();

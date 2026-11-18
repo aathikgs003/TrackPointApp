@@ -10,7 +10,8 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
-        android:theme="@style/Theme.TrackPoint">
+        android:theme="@style/Theme.TrackPoint"
+        android:usesCleartextTraffic="true">
 
         <activity android:name=".StudentAdmin"
             android:exported="false"/>

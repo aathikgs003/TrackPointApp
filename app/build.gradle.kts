@@ -42,6 +42,15 @@ dependencies {
     implementation("com.amazonaws:aws-android-sdk-s3:2.75.0")
     implementation("com.amazonaws:aws-android-sdk-core:2.75.0")
 
+    // Retrofit 2 & Gson for Neon Cloud Database Backend API
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // Image & Document Loading (Glide)
+    implementation("com.github.bumptech.glide:glide:4.16.0")
+    annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)

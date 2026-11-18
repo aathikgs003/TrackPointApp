@@ -1,8 +1,5 @@
 package com.example.trackpoint;
 
-import android.content.ContentValues;
-import android.database.Cursor;
-
 public class StaffAdminModel {
 
     private long id;
@@ -102,40 +99,5 @@ public class StaffAdminModel {
 
     public void setUpdatedAt(String updatedAt) {
         this.updatedAt = updatedAt;
-    }
-
-    public ContentValues toContentValues() {
-        ContentValues values = new ContentValues();
-        values.put("name", name);
-        values.put("staff_id", staffId);
-        values.put("department", department);
-        values.put("email", email);
-        values.put("phone", phone);
-        values.put("password", password != null ? password : "123");
-        values.put("updated_at", updatedAt != null ? updatedAt : "");
-        return values;
-    }
-
-    public static StaffAdminModel fromCursor(Cursor cursor) {
-        if (cursor == null) return null;
-
-        long id = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
-        String name = cursor.getString(cursor.getColumnIndexOrThrow("name"));
-        String staffId = cursor.getString(cursor.getColumnIndexOrThrow("staff_id"));
-        String department = cursor.getString(cursor.getColumnIndexOrThrow("department"));
-
-        int emailIdx = cursor.getColumnIndex("email");
-        String email = emailIdx != -1 ? cursor.getString(emailIdx) : "";
-
-        int phoneIdx = cursor.getColumnIndex("phone");
-        String phone = phoneIdx != -1 ? cursor.getString(phoneIdx) : "";
-
-        int passIdx = cursor.getColumnIndex("password");
-        String password = passIdx != -1 ? cursor.getString(passIdx) : "123";
-
-        int updatedIdx = cursor.getColumnIndex("updated_at");
-        String updatedAt = updatedIdx != -1 ? cursor.getString(updatedIdx) : "";
-
-        return new StaffAdminModel(id, name, staffId, department, email, phone, password, updatedAt);
     }
 }

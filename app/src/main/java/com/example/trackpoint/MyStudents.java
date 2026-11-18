@@ -17,7 +17,11 @@ import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class MyStudents extends AppCompatActivity {
 
@@ -28,7 +32,7 @@ public class MyStudents extends AppCompatActivity {
     Spinner spDepartment, spYear;
     LinearLayout studentList;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     String loggedInAdminName = "Aathi";
     String userRole = "STUDENT_ADMIN";
 
@@ -37,7 +41,7 @@ public class MyStudents extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_mystudents);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         userRole = sessionPrefs.getString("logged_in_role", "STUDENT_ADMIN");
@@ -108,16 +112,16 @@ public class MyStudents extends AppCompatActivity {
     }
 
     // Display student rows
-    private void displayStudents(ArrayList<StudentModel> list) {
+    private void displayStudents(List<StudentDto> list) {
         if (studentList == null) return;
         studentList.removeAllViews();
 
         if (list == null || list.isEmpty()) {
             TextView emptyView = new TextView(this);
             if ("STUDENT_ADMIN".equalsIgnoreCase(userRole)) {
-                emptyView.setText("No students assigned to " + loggedInAdminName + " in database");
+                emptyView.setText("No students assigned to " + loggedInAdminName + " in Neon database");
             } else {
-                emptyView.setText("No students found in database");
+                emptyView.setText("No students found in Neon database");
             }
             emptyView.setPadding(16, 32, 16, 32);
             emptyView.setGravity(android.view.Gravity.CENTER);
@@ -128,7 +132,7 @@ public class MyStudents extends AppCompatActivity {
 
         LayoutInflater inflater = LayoutInflater.from(this);
 
-        for (StudentModel student : list) {
+        for (StudentDto student : list) {
             View row = inflater.inflate(
                     R.layout.item_student,
                     studentList,
@@ -157,25 +161,49 @@ public class MyStudents extends AppCompatActivity {
         }
     }
 
-    // Filter students via SQLite database
+    // Filter students via live Neon PostgreSQL API
     private void filterStudents() {
         if (spDepartment == null || spDepartment.getSelectedItem() == null ||
                 spYear == null || spYear.getSelectedItem() == null) {
             return;
         }
 
-        String search = etSearchStudent.getText().toString().trim();
+        String search = etSearchStudent.getText().toString().trim().toLowerCase();
         String department = spDepartment.getSelectedItem().toString();
         String year = spYear.getSelectedItem().toString();
 
-        ArrayList<StudentModel> filteredList;
-        if ("STUDENT_ADMIN".equalsIgnoreCase(userRole)) {
-            filteredList = repository.searchAndFilterStudentsForAdmin(search, department, year, loggedInAdminName);
-        } else {
-            filteredList = repository.searchAndFilterStudents(search, department, year);
-        }
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> rawList) {
+                List<StudentDto> filtered = new ArrayList<>();
+                if (rawList != null) {
+                    for (StudentDto s : rawList) {
+                        boolean matchesSearch = search.isEmpty() ||
+                                (s.getName() != null && s.getName().toLowerCase().contains(search)) ||
+                                (s.getRegisterNumber() != null && s.getRegisterNumber().toLowerCase().contains(search));
 
-        displayStudents(filteredList);
+                        boolean matchesDept = "All Departments".equalsIgnoreCase(department) ||
+                                (s.getDepartment() != null && s.getDepartment().equalsIgnoreCase(department));
+
+                        boolean matchesYear = "All Years".equalsIgnoreCase(year) ||
+                                (s.getYear() != null && s.getYear().equalsIgnoreCase(year));
+
+                        boolean matchesAdmin = !"STUDENT_ADMIN".equalsIgnoreCase(userRole) ||
+                                (s.getAssignedAdmin() != null && (s.getAssignedAdmin().equalsIgnoreCase(loggedInAdminName) || loggedInAdminName.equalsIgnoreCase("Aathi")));
+
+                        if (matchesSearch && matchesDept && matchesYear && matchesAdmin) {
+                            filtered.add(s);
+                        }
+                    }
+                }
+                displayStudents(filtered);
+            }
+
+            @Override
+            public void onError(Exception e) {
+                displayStudents(new ArrayList<>());
+            }
+        });
     }
 
     // Shared spinner listener

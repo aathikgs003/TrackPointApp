@@ -13,7 +13,12 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class StaffAddStudentActivity extends AppCompatActivity {
 
@@ -22,7 +27,7 @@ public class StaffAddStudentActivity extends AppCompatActivity {
     Button btnSaveStudent;
     ImageView btnBack;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,7 +41,7 @@ public class StaffAddStudentActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_staff_add_student);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         etStudentName = findViewById(R.id.etStudentName);
         etRegisterNumber = findViewById(R.id.etRegisterNumber);
@@ -53,18 +58,26 @@ public class StaffAddStudentActivity extends AppCompatActivity {
         setSpinner(spDepartment, new String[]{"Select Department", "CSE", "AI & DS", "ECE", "IT", "MECH"});
         setSpinner(spYear, new String[]{"Select Year", "I Year", "II Year", "III Year", "IV Year"});
 
-        ArrayList<StudentAdminModel> adminsList = repository.getAllStudentAdmins();
-        ArrayList<String> adminNames = new ArrayList<>();
-        adminNames.add("Select Student Admin");
-        if (adminsList.isEmpty()) {
-            adminNames.add("Aathi");
-        } else {
-            for (StudentAdminModel sa : adminsList) {
-                adminNames.add(sa.getName());
+        repository.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+            @Override
+            public void onSuccess(List<StudentAdminDto> adminsList) {
+                ArrayList<String> adminNames = new ArrayList<>();
+                adminNames.add("Select Student Admin");
+                if (adminsList == null || adminsList.isEmpty()) {
+                    adminNames.add("Aathi");
+                } else {
+                    for (StudentAdminDto sa : adminsList) {
+                        adminNames.add(sa.getName());
+                    }
+                }
+                setSpinner(spAssignAdmin, adminNames.toArray(new String[0]));
             }
-        }
 
-        setSpinner(spAssignAdmin, adminNames.toArray(new String[0]));
+            @Override
+            public void onError(Exception e) {
+                setSpinner(spAssignAdmin, new String[]{"Select Student Admin", "Aathi"});
+            }
+        });
 
         btnBack.setOnClickListener(v -> finish());
 
@@ -87,16 +100,13 @@ public class StaffAddStudentActivity extends AppCompatActivity {
                 return;
             }
 
-            if (repository.registerNumberExists(regNo)) {
-                Toast.makeText(this, "Register number already exists in database!", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
             String dept = spDepartment.getSelectedItem().toString();
             String year = spYear.getSelectedItem().toString();
             String assignedAdmin = spAssignAdmin.getSelectedItem().toString();
 
-            StudentModel newStudent = new StudentModel(
+            btnSaveStudent.setEnabled(false);
+
+            StudentDto studentDto = new StudentDto(
                     name,
                     regNo,
                     dept,
@@ -107,23 +117,30 @@ public class StaffAddStudentActivity extends AppCompatActivity {
                     assignedAdmin
             );
 
-            long rowId = repository.addStudent(newStudent);
-            if (rowId > 0) {
-                Intent resultIntent = new Intent();
-                resultIntent.putExtra("studentName", name);
-                resultIntent.putExtra("studentId", regNo);
-                resultIntent.putExtra("department", dept);
-                resultIntent.putExtra("year", year);
-                resultIntent.putExtra("assignedAdmin", assignedAdmin);
-                resultIntent.putExtra("phone", phone);
-                resultIntent.putExtra("email", email);
-                setResult(RESULT_OK, resultIntent);
+            repository.createStudent(studentDto, new TrackPointRepository.RepositoryCallback<StudentDto>() {
+                @Override
+                public void onSuccess(StudentDto result) {
+                    btnSaveStudent.setEnabled(true);
+                    Intent resultIntent = new Intent();
+                    resultIntent.putExtra("studentName", name);
+                    resultIntent.putExtra("studentId", regNo);
+                    resultIntent.putExtra("department", dept);
+                    resultIntent.putExtra("year", year);
+                    resultIntent.putExtra("assignedAdmin", assignedAdmin);
+                    resultIntent.putExtra("phone", phone);
+                    resultIntent.putExtra("email", email);
+                    setResult(RESULT_OK, resultIntent);
 
-                Toast.makeText(this, name + " saved and assigned to " + assignedAdmin + "!", Toast.LENGTH_SHORT).show();
-                finish();
-            } else {
-                Toast.makeText(this, "Failed to save student to database", Toast.LENGTH_SHORT).show();
-            }
+                    Toast.makeText(StaffAddStudentActivity.this, name + " saved to Neon database!", Toast.LENGTH_SHORT).show();
+                    finish();
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    btnSaveStudent.setEnabled(true);
+                    Toast.makeText(StaffAddStudentActivity.this, "Failed to save student: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
     }
 

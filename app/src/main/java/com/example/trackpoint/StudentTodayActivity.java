@@ -18,6 +18,9 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.trackpoint.network.dto.DailyActivityDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -36,8 +39,10 @@ public class StudentTodayActivity extends AppCompatActivity {
     String todayDateKey;
     String todayDateDisplay;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     String loggedInRegNo = "CSE22CS001";
+    String currentFileKey = "";
+    String currentFileName = "";
 
     private final ActivityResultLauncher<String> filePickerLauncher = registerForActivityResult(
             new ActivityResultContracts.GetContent(),
@@ -68,7 +73,7 @@ public class StudentTodayActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_student_today_activity);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
@@ -134,26 +139,38 @@ public class StudentTodayActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, todayDateKey);
+        // Fetch live activity from Neon PostgreSQL database
+        repository.getDailyActivity(loggedInRegNo, todayDateKey, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+            @Override
+            public void onSuccess(DailyActivityDto activity) {
+                if (activity != null && ((activity.getFileName() != null && !activity.getFileName().isEmpty()) || (activity.getNotes() != null && !activity.getNotes().isEmpty()))) {
+                    currentFileKey = activity.getFileKey() != null ? activity.getFileKey() : "";
+                    currentFileName = activity.getFileName() != null ? activity.getFileName() : "Document Uploaded";
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        boolean isSubmitted = (dbModel != null) || prefs.getBoolean("submitted_" + loggedInRegNo + "_" + todayDateKey, false);
+                    String submitTime = activity.getSubmitTime() != null && !activity.getSubmitTime().isEmpty() ? activity.getSubmitTime() : "Submitted Today";
+                    String notes = activity.getNotes() != null ? activity.getNotes() : "No description added";
 
-        if (isSubmitted) {
-            String fileName = dbModel != null ? dbModel.getFileName() : prefs.getString("file_name_" + loggedInRegNo + "_" + todayDateKey, "Document Uploaded");
-            String submitTime = dbModel != null ? dbModel.getSubmitTime() : prefs.getString("submit_time_" + loggedInRegNo + "_" + todayDateKey, "Submitted Today");
-            String notes = dbModel != null ? dbModel.getNotes() : prefs.getString("notes_" + loggedInRegNo + "_" + todayDateKey, "No description added");
+                    if (tvSubmittedFileName != null) tvSubmittedFileName.setText("📄 " + currentFileName);
+                    if (tvSubmittedTime != null) tvSubmittedTime.setText(submitTime);
+                    if (tvSubmittedNotes != null) tvSubmittedNotes.setText(notes.isEmpty() ? "No description added" : notes);
 
-            if (tvSubmittedFileName != null) tvSubmittedFileName.setText("📄 " + fileName);
-            if (tvSubmittedTime != null) tvSubmittedTime.setText(submitTime);
-            if (tvSubmittedNotes != null) tvSubmittedNotes.setText(notes.isEmpty() ? "No description added" : notes);
+                    if (layoutSubmittedView != null) layoutSubmittedView.setVisibility(View.VISIBLE);
+                    if (layoutUploadForm != null) layoutUploadForm.setVisibility(View.GONE);
+                } else {
+                    showFormMode();
+                }
+            }
 
-            if (layoutSubmittedView != null) layoutSubmittedView.setVisibility(View.VISIBLE);
-            if (layoutUploadForm != null) layoutUploadForm.setVisibility(View.GONE);
-        } else {
-            if (layoutSubmittedView != null) layoutSubmittedView.setVisibility(View.GONE);
-            if (layoutUploadForm != null) layoutUploadForm.setVisibility(View.VISIBLE);
-        }
+            @Override
+            public void onError(Exception e) {
+                showFormMode();
+            }
+        });
+    }
+
+    private void showFormMode() {
+        if (layoutSubmittedView != null) layoutSubmittedView.setVisibility(View.GONE);
+        if (layoutUploadForm != null) layoutUploadForm.setVisibility(View.VISIBLE);
     }
 
     private void submitTodayActivity() {
@@ -167,76 +184,38 @@ public class StudentTodayActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        String previousFileName = prefs.getString("file_name_" + loggedInRegNo + "_" + todayDateKey, null);
-        DailyActivityModel existingModel = repository.getDailyActivity(loggedInRegNo, todayDateKey);
-        if (existingModel != null && existingModel.getFileName() != null && !existingModel.getFileName().isEmpty()) {
-            previousFileName = existingModel.getFileName();
-        }
-
-        String fileName = selectedFileUri != null ? getFileNameFromUri(selectedFileUri) : (previousFileName != null ? previousFileName : "Activity Notes Submitted");
-        String objectKey = "submissions/" + loggedInRegNo + "/" + todayDateKey + "_" + fileName;
         SimpleDateFormat timeFmt = new SimpleDateFormat("hh:mm a", Locale.getDefault());
-        String timeStr = timeFmt.format(new Date());
+        String timeStr = "Submitted at " + timeFmt.format(new Date());
 
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.putBoolean("submitted_" + loggedInRegNo + "_" + todayDateKey, true);
-        editor.putString("file_name_" + loggedInRegNo + "_" + todayDateKey, fileName);
-        editor.putString("file_url_" + loggedInRegNo + "_" + todayDateKey, objectKey);
-        editor.putString("notes_" + loggedInRegNo + "_" + todayDateKey, notes);
-        editor.putString("submit_time_" + loggedInRegNo + "_" + todayDateKey, "Submitted at " + timeStr);
-        editor.putString("date_display_" + loggedInRegNo + "_" + todayDateKey, todayDateDisplay);
-        editor.apply();
+        if (btnSubmitActivity != null) btnSubmitActivity.setEnabled(false);
 
-        // Save into SQLite Database (includes Backblaze B2 Object Key in file_url column)
-        repository.saveOrUpdateDailyActivity(loggedInRegNo, todayDateKey, fileName, objectKey, notes, "Submitted at " + timeStr);
-
-        // Upload File to Backblaze B2 S3 Bucket
-        if (selectedFileUri != null) {
-            if (previousFileName != null && !previousFileName.equalsIgnoreCase(fileName)) {
-                String oldObjectKey = "submissions/" + loggedInRegNo + "/" + todayDateKey + "_" + previousFileName;
-                S3StorageManager.getInstance(this).deleteFile(oldObjectKey, null);
+        // Submit via TrackPointRepository (uploads file to B2 S3 and saves record to Neon)
+        repository.submitDailyActivity(this, selectedFileUri, loggedInRegNo, todayDateKey, notes, timeStr, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+            @Override
+            public void onSuccess(DailyActivityDto result) {
+                if (btnSubmitActivity != null) btnSubmitActivity.setEnabled(true);
+                Toast.makeText(StudentTodayActivity.this, "Today's activity saved to Neon PostgreSQL & Backblaze B2 S3!", Toast.LENGTH_LONG).show();
+                selectedFileUri = null;
+                if (etActivityNotes != null) etActivityNotes.setText("");
+                if (layoutSelectedFile != null) layoutSelectedFile.setVisibility(View.GONE);
+                loadSubmissionState();
             }
 
-            S3StorageManager.getInstance(this).uploadFile(this, selectedFileUri, loggedInRegNo, todayDateKey, new S3StorageManager.S3UploadCallback() {
-                @Override
-                public void onSuccess(String uploadedKey, String presignedUrl) {
-                    repository.saveOrUpdateDailyActivity(loggedInRegNo, todayDateKey, fileName, uploadedKey, notes, "Submitted at " + timeStr);
-                    Toast.makeText(StudentTodayActivity.this, "File uploaded to Backblaze B2 S3 bucket!", Toast.LENGTH_SHORT).show();
-                    loadSubmissionState();
-                }
-
-                @Override
-                public void onError(Exception e) {
-                    Toast.makeText(StudentTodayActivity.this, "S3 Notice: " + (e != null && e.getLocalizedMessage() != null ? e.getLocalizedMessage() : "Check S3 connection"), Toast.LENGTH_LONG).show();
-                }
-            });
-        }
-
-        Toast.makeText(this, "Today's activity submitted successfully!", Toast.LENGTH_LONG).show();
-        loadSubmissionState();
+            @Override
+            public void onError(Exception e) {
+                if (btnSubmitActivity != null) btnSubmitActivity.setEnabled(true);
+                Toast.makeText(StudentTodayActivity.this, "Failed to submit activity: " + (e != null ? e.getMessage() : "Network error"), Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void prepareEditMode() {
-        SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
-        loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
-
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        String notes = prefs.getString("notes_" + loggedInRegNo + "_" + todayDateKey, "");
-        String fileName = prefs.getString("file_name_" + loggedInRegNo + "_" + todayDateKey, "");
-
-        DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, todayDateKey);
-        if (dbModel != null) {
-            notes = dbModel.getNotes();
-            fileName = dbModel.getFileName();
+        if (etActivityNotes != null && tvSubmittedNotes != null) {
+            etActivityNotes.setText(tvSubmittedNotes.getText().toString().replaceAll("^No description added$", ""));
         }
 
-        if (etActivityNotes != null) {
-            etActivityNotes.setText(notes);
-        }
-
-        if (tvFileName != null && !fileName.isEmpty()) {
-            tvFileName.setText(fileName);
+        if (tvFileName != null && !currentFileName.isEmpty()) {
+            tvFileName.setText(currentFileName);
             if (layoutSelectedFile != null) layoutSelectedFile.setVisibility(View.VISIBLE);
         }
 
@@ -251,7 +230,7 @@ public class StudentTodayActivity extends AppCompatActivity {
     private void showDeleteConfirmationDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("Delete Activity")
-                .setMessage("Are you sure you want to delete today's activity submission?")
+                .setMessage("Are you sure you want to delete today's activity submission from Neon PostgreSQL & Backblaze B2?")
                 .setPositiveButton("Yes, Delete", (dialog, which) -> deleteTodayActivity())
                 .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
                 .show();
@@ -261,49 +240,31 @@ public class StudentTodayActivity extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         loggedInRegNo = sessionPrefs.getString("logged_in_reg_no", "CSE22CS001");
 
-        SharedPreferences prefs = getSharedPreferences("TodayActivityPrefs", MODE_PRIVATE);
-        String fileName = prefs.getString("file_name_" + loggedInRegNo + "_" + todayDateKey, "upload_file");
+        if (btnDeleteSubmission != null) btnDeleteSubmission.setEnabled(false);
 
-        DailyActivityModel dbModel = repository.getDailyActivity(loggedInRegNo, todayDateKey);
-        if (dbModel != null && dbModel.getFileName() != null && !dbModel.getFileName().isEmpty()) {
-            fileName = dbModel.getFileName();
-        }
-
-        SharedPreferences.Editor editor = prefs.edit();
-        editor.remove("submitted_" + loggedInRegNo + "_" + todayDateKey);
-        editor.remove("file_name_" + loggedInRegNo + "_" + todayDateKey);
-        editor.remove("file_url_" + loggedInRegNo + "_" + todayDateKey);
-        editor.remove("notes_" + loggedInRegNo + "_" + todayDateKey);
-        editor.remove("submit_time_" + loggedInRegNo + "_" + todayDateKey);
-        editor.remove("date_display_" + loggedInRegNo + "_" + todayDateKey);
-        editor.apply();
-
-        // Remove from SQLite Database
-        repository.deleteDailyActivity(loggedInRegNo, todayDateKey);
-
-        // Delete File from Backblaze B2 S3 Bucket
-        String objectKey = "submissions/" + loggedInRegNo + "/" + todayDateKey + "_" + fileName;
-        S3StorageManager.getInstance(this).deleteFile(objectKey, new S3StorageManager.S3DeleteCallback() {
+        repository.deleteDailyActivity(loggedInRegNo, todayDateKey, currentFileKey, new TrackPointRepository.RepositoryCallback<Void>() {
             @Override
-            public void onSuccess() {
-                Toast.makeText(StudentTodayActivity.this, "File removed from Backblaze B2 S3 bucket", Toast.LENGTH_SHORT).show();
+            public void onSuccess(Void result) {
+                if (btnDeleteSubmission != null) btnDeleteSubmission.setEnabled(true);
+                selectedFileUri = null;
+                currentFileKey = "";
+                currentFileName = "";
+                if (etActivityNotes != null) etActivityNotes.setText("");
+                if (layoutSelectedFile != null) layoutSelectedFile.setVisibility(View.GONE);
+                if (tvUploadTitle != null) tvUploadTitle.setText("Click here to upload file");
+                if (tvUploadSubtitle != null) tvUploadSubtitle.setText("Supports images, PDF, Word & documents");
+                if (btnSubmitActivity != null) btnSubmitActivity.setText("Submit Activity");
+
+                Toast.makeText(StudentTodayActivity.this, "Today's activity deleted from Neon database!", Toast.LENGTH_SHORT).show();
+                loadSubmissionState();
             }
 
             @Override
             public void onError(Exception e) {
-                e.printStackTrace();
+                if (btnDeleteSubmission != null) btnDeleteSubmission.setEnabled(true);
+                Toast.makeText(StudentTodayActivity.this, "Failed to delete activity: " + (e != null ? e.getMessage() : "Error"), Toast.LENGTH_SHORT).show();
             }
         });
-
-        selectedFileUri = null;
-        if (etActivityNotes != null) etActivityNotes.setText("");
-        if (layoutSelectedFile != null) layoutSelectedFile.setVisibility(View.GONE);
-        if (tvUploadTitle != null) tvUploadTitle.setText("Click here to upload file");
-        if (tvUploadSubtitle != null) tvUploadSubtitle.setText("Supports images, PDF, Word & documents");
-        if (btnSubmitActivity != null) btnSubmitActivity.setText("Submit Activity");
-
-        Toast.makeText(this, "Today's activity deleted.", Toast.LENGTH_SHORT).show();
-        loadSubmissionState();
     }
 
     private String getFileNameFromUri(Uri uri) {
