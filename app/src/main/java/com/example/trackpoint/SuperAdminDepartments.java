@@ -18,6 +18,12 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.DepartmentDto;
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -89,26 +95,108 @@ public class SuperAdminDepartments extends AppCompatActivity {
     }
 
     private void loadDepartmentsFromDatabase() {
-        departments.clear();
+        TrackPointRepository cloudRepo = TrackPointRepository.getInstance(this);
+        cloudRepo.getAllDepartments(new TrackPointRepository.RepositoryCallback<List<DepartmentDto>>() {
+            @Override
+            public void onSuccess(List<DepartmentDto> deptList) {
+                cloudRepo.getAllStaffAdmins(new TrackPointRepository.RepositoryCallback<List<StaffAdminDto>>() {
+                    @Override
+                    public void onSuccess(List<StaffAdminDto> staffList) {
+                        cloudRepo.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+                            @Override
+                            public void onSuccess(List<StudentAdminDto> saList) {
+                                cloudRepo.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+                                    @Override
+                                    public void onSuccess(List<StudentDto> studentList) {
+                                        departments.clear();
+                                        if (deptList != null && !deptList.isEmpty()) {
+                                            for (DepartmentDto d : deptList) {
+                                                String code = d.getCode();
+                                                String fullName = d.getFullName();
+                                                int sCount = countStaff(staffList, code);
+                                                int saCount = countStudentAdmins(saList, code);
+                                                int stCount = countStudents(studentList, code);
+                                                departments.add(new DeptModel(code, fullName, sCount, saCount, stCount));
+                                            }
+                                        } else {
+                                            String[][] defaultDepts = {
+                                                    {"CSE", "Computer Science & Engineering"},
+                                                    {"AI & DS", "Artificial Intelligence & Data Science"},
+                                                    {"ECE", "Electronics & Communication"},
+                                                    {"IT", "Information Technology"},
+                                                    {"MECH", "Mechanical Engineering"}
+                                            };
+                                            for (String[] d : defaultDepts) {
+                                                String code = d[0];
+                                                String fullName = d[1];
+                                                int sCount = countStaff(staffList, code);
+                                                int saCount = countStudentAdmins(saList, code);
+                                                int stCount = countStudents(studentList, code);
+                                                departments.add(new DeptModel(code, fullName, sCount, saCount, stCount));
+                                            }
+                                        }
+                                        renderDepartments(searchDepartment.getText().toString().trim());
+                                    }
 
-        String[][] defaultDepts = {
-                {"CSE", "Computer Science & Engineering"},
-                {"AI & DS", "Artificial Intelligence & Data Science"},
-                {"ECE", "Electronics & Communication"},
-                {"IT", "Information Technology"},
-                {"MECH", "Mechanical Engineering"}
-        };
+                                    @Override
+                                    public void onError(Exception e) {
+                                        renderDepartments(searchDepartment.getText().toString().trim());
+                                    }
+                                });
+                            }
 
-        for (String[] d : defaultDepts) {
-            String code = d[0];
-            String fullName = d[1];
+                            @Override
+                            public void onError(Exception e) {
+                                renderDepartments(searchDepartment.getText().toString().trim());
+                            }
+                        });
+                    }
 
-            int staffCount = repository.getStaffAdminCountForDept(code);
-            int studentAdminCount = repository.getStudentAdminCountForDept(code);
-            int studentCount = repository.getStudentCountForDept(code);
+                    @Override
+                    public void onError(Exception e) {
+                        renderDepartments(searchDepartment.getText().toString().trim());
+                    }
+                });
+            }
 
-            departments.add(new DeptModel(code, fullName, staffCount, studentAdminCount, studentCount));
+            @Override
+            public void onError(Exception e) {
+                renderDepartments(searchDepartment.getText().toString().trim());
+            }
+        });
+    }
+
+    private int countStaff(List<StaffAdminDto> list, String deptCode) {
+        if (list == null) return 0;
+        int count = 0;
+        for (StaffAdminDto s : list) {
+            if (s.getDepartment() != null && (s.getDepartment().equalsIgnoreCase(deptCode) || s.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                count++;
+            }
         }
+        return count;
+    }
+
+    private int countStudentAdmins(List<StudentAdminDto> list, String deptCode) {
+        if (list == null) return 0;
+        int count = 0;
+        for (StudentAdminDto sa : list) {
+            if (sa.getDepartment() != null && (sa.getDepartment().equalsIgnoreCase(deptCode) || sa.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countStudents(List<StudentDto> list, String deptCode) {
+        if (list == null) return 0;
+        int count = 0;
+        for (StudentDto st : list) {
+            if (st.getDepartment() != null && (st.getDepartment().equalsIgnoreCase(deptCode) || st.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void showAddDepartmentDialog() {

@@ -15,8 +15,15 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.DepartmentDto;
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class SuperAdminDashboard extends AppCompatActivity {
@@ -144,16 +151,63 @@ public class SuperAdminDashboard extends AppCompatActivity {
     }
 
     private void loadSuperAdminDashboardMetrics() {
-        int staffCount = repository.getAllStaffAdmins().size();
-        int studentAdminCount = repository.getAllStudentAdmins().size();
-        int studentCount = repository.getAllStudents().size();
+        TrackPointRepository cloudRepo = TrackPointRepository.getInstance(this);
 
-        int deptCount = repository.getDepartmentCount();
+        cloudRepo.getAllDepartments(new TrackPointRepository.RepositoryCallback<List<DepartmentDto>>() {
+            @Override
+            public void onSuccess(List<DepartmentDto> result) {
+                if (txtCountDepartments != null && result != null) {
+                    txtCountDepartments.setText(String.valueOf(result.size()));
+                }
+            }
 
-        if (txtCountStaffAdmins != null) txtCountStaffAdmins.setText(String.valueOf(staffCount));
-        if (txtCountStudentAdmins != null) txtCountStudentAdmins.setText(String.valueOf(studentAdminCount));
-        if (txtCountTotalStudents != null) txtCountTotalStudents.setText(String.valueOf(studentCount));
-        if (txtCountDepartments != null) txtCountDepartments.setText(String.valueOf(deptCount));
+            @Override
+            public void onError(Exception e) {
+                if (txtCountDepartments != null) txtCountDepartments.setText("0");
+            }
+        });
+
+        cloudRepo.getAllStaffAdmins(new TrackPointRepository.RepositoryCallback<List<StaffAdminDto>>() {
+            @Override
+            public void onSuccess(List<StaffAdminDto> result) {
+                if (txtCountStaffAdmins != null && result != null) {
+                    txtCountStaffAdmins.setText(String.valueOf(result.size()));
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtCountStaffAdmins != null) txtCountStaffAdmins.setText("0");
+            }
+        });
+
+        cloudRepo.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+            @Override
+            public void onSuccess(List<StudentAdminDto> result) {
+                if (txtCountStudentAdmins != null && result != null) {
+                    txtCountStudentAdmins.setText(String.valueOf(result.size()));
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtCountStudentAdmins != null) txtCountStudentAdmins.setText("0");
+            }
+        });
+
+        cloudRepo.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> result) {
+                if (txtCountTotalStudents != null && result != null) {
+                    txtCountTotalStudents.setText(String.valueOf(result.size()));
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtCountTotalStudents != null) txtCountTotalStudents.setText("0");
+            }
+        });
     }
 
     private void showLogoutDialog() {

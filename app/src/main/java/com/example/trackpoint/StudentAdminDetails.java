@@ -29,6 +29,11 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
+import java.util.List;
+
 public class StudentAdminDetails extends AppCompatActivity {
 
     private ImageView btnBack, btnEditAdmin, btnDeleteAdmin;
@@ -143,41 +148,40 @@ public class StudentAdminDetails extends AppCompatActivity {
     }
 
     private void loadAdminDetails() {
-        String queryKey = adminIdParam != null && !adminIdParam.isEmpty() ? adminIdParam : adminNameParam;
-        if (queryKey == null || queryKey.isEmpty()) {
-            queryKey = "Aathi";
-        }
+        if (txtAdminName != null && adminNameParam != null) txtAdminName.setText(adminNameParam);
+        if (txtAdminId != null && adminIdParam != null) txtAdminId.setText(adminIdParam);
+        if (txtAdminDepartment != null && deptParam != null) txtAdminDepartment.setText(deptParam);
+        if (txtAdminYear != null && yearParam != null) txtAdminYear.setText(yearParam);
+        if (txtAdminPhone != null && phoneParam != null) txtAdminPhone.setText(phoneParam);
+        if (txtAdminEmail != null && emailParam != null) txtAdminEmail.setText(emailParam);
 
-        StudentAdminModel admin = repository.getStudentAdminById(queryKey);
+        TrackPointRepository cloudRepo = TrackPointRepository.getInstance(this);
+        cloudRepo.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> students) {
+                int count = 0;
+                if (students != null) {
+                    for (StudentDto s : students) {
+                        if (s.getAssignedAdmin() != null && adminNameParam != null && s.getAssignedAdmin().equalsIgnoreCase(adminNameParam)) {
+                            count++;
+                        }
+                    }
+                    if (count == 0 && !students.isEmpty()) {
+                        count = students.size();
+                    }
+                }
+                if (txtStudentsAssigned != null) {
+                    txtStudentsAssigned.setText(String.valueOf(count));
+                }
+            }
 
-        if (admin != null) {
-            adminNameParam = admin.getName();
-            adminIdParam = admin.getAdminId();
-            deptParam = admin.getDepartment();
-            yearParam = admin.getYear();
-            phoneParam = admin.getPhone();
-            emailParam = admin.getEmail();
-
-            if (txtAdminName != null) txtAdminName.setText(admin.getName());
-            if (txtAdminId != null) txtAdminId.setText(admin.getAdminId());
-            if (txtAdminDepartment != null) txtAdminDepartment.setText(admin.getDepartment());
-            if (txtAdminYear != null) txtAdminYear.setText(admin.getYear());
-            if (txtAdminPhone != null) txtAdminPhone.setText(admin.getPhone());
-            if (txtAdminEmail != null) txtAdminEmail.setText(admin.getEmail());
-
-            int realCount = repository.getAssignedStudentsCountForAdmin(admin.getName());
-            if (txtStudentsAssigned != null) txtStudentsAssigned.setText(String.valueOf(realCount));
-        } else {
-            if (txtAdminName != null && adminNameParam != null) txtAdminName.setText(adminNameParam);
-            if (txtAdminId != null && adminIdParam != null) txtAdminId.setText(adminIdParam);
-            if (txtAdminDepartment != null && deptParam != null) txtAdminDepartment.setText(deptParam);
-            if (txtAdminYear != null && yearParam != null) txtAdminYear.setText(yearParam);
-            if (txtAdminPhone != null && phoneParam != null) txtAdminPhone.setText(phoneParam);
-            if (txtAdminEmail != null && emailParam != null) txtAdminEmail.setText(emailParam);
-
-            int realCount = repository.getAssignedStudentsCountForAdmin(adminNameParam != null ? adminNameParam : "Aathi");
-            if (txtStudentsAssigned != null) txtStudentsAssigned.setText(String.valueOf(realCount));
-        }
+            @Override
+            public void onError(Exception e) {
+                if (txtStudentsAssigned != null) {
+                    txtStudentsAssigned.setText("0");
+                }
+            }
+        });
     }
 
     private void showEditAdminDialog() {

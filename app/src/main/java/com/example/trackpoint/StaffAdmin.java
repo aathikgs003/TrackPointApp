@@ -16,9 +16,14 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class StaffAdmin extends AppCompatActivity {
@@ -139,37 +144,59 @@ public class StaffAdmin extends AppCompatActivity {
         SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
         String loggedInStaffName = sessionPrefs.getString("logged_in_staff_name", "Suruthika J");
         String loggedInStaffId = sessionPrefs.getString("logged_in_staff_id", "STF001");
+        final String finalStaffName = loggedInStaffName;
+        final String finalStaffId = loggedInStaffId;
 
-        StaffAdminModel currentStaff = repository.getStaffAdminByEmail(loggedInStaffId);
-        if (currentStaff == null) currentStaff = repository.getStaffAdminByEmail(loggedInStaffName);
-        if (currentStaff != null) loggedInStaffName = currentStaff.getName();
+        TrackPointRepository cloudRepo = TrackPointRepository.getInstance(this);
 
-        ArrayList<StudentAdminModel> assignedStudentAdmins = repository.getStudentAdminsForStaff(loggedInStaffName);
-        int studentAdminsCount = assignedStudentAdmins.size();
+        cloudRepo.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+            @Override
+            public void onSuccess(List<StudentAdminDto> studentAdmins) {
+                int saCount = 0;
+                if (studentAdmins != null) {
+                    for (StudentAdminDto sa : studentAdmins) {
+                        if (sa.getAssignedStaffAdmin() == null
+                                || sa.getAssignedStaffAdmin().equalsIgnoreCase(finalStaffName)
+                                || sa.getAssignedStaffAdmin().equalsIgnoreCase(finalStaffId)) {
+                            saCount++;
+                        }
+                    }
+                    if (saCount == 0) {
+                        saCount = studentAdmins.size();
+                    }
+                }
+                if (tvStaffAdminsCount != null) {
+                    tvStaffAdminsCount.setText(String.valueOf(saCount));
+                }
+            }
 
-        int totalStudentsCount = 0;
-        for (StudentAdminModel sa : assignedStudentAdmins) {
-            totalStudentsCount += repository.getAssignedStudentsCountForAdmin(sa.getName());
-        }
-        if (totalStudentsCount == 0) {
-            totalStudentsCount = repository.getAllStudents().size();
-        }
+            @Override
+            public void onError(Exception e) {
+                if (tvStaffAdminsCount != null) tvStaffAdminsCount.setText("0");
+            }
+        });
 
-        if (tvStaffAdminsCount != null) {
-            tvStaffAdminsCount.setText(String.valueOf(studentAdminsCount));
-        }
+        cloudRepo.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> students) {
+                int totalStudents = (students != null) ? students.size() : 0;
+                if (tvStaffStudentsCount != null) {
+                    tvStaffStudentsCount.setText(String.valueOf(totalStudents));
+                }
+                if (tvStaffAttendanceRate != null) {
+                    tvStaffAttendanceRate.setText("95%");
+                }
+                if (tvStaffSubmissionsCount != null) {
+                    tvStaffSubmissionsCount.setText(String.valueOf(totalStudents));
+                }
+            }
 
-        if (tvStaffStudentsCount != null) {
-            tvStaffStudentsCount.setText(String.valueOf(totalStudentsCount));
-        }
-
-        if (tvStaffAttendanceRate != null) {
-            tvStaffAttendanceRate.setText("95%");
-        }
-
-        if (tvStaffSubmissionsCount != null) {
-            tvStaffSubmissionsCount.setText(String.valueOf(totalStudentsCount));
-        }
+            @Override
+            public void onError(Exception e) {
+                if (tvStaffStudentsCount != null) tvStaffStudentsCount.setText("0");
+                if (tvStaffSubmissionsCount != null) tvStaffSubmissionsCount.setText("0");
+            }
+        });
     }
 
     private void showLogoutDialog() {

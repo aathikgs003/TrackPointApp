@@ -9,6 +9,13 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
+import java.util.List;
+
 public class SuperAdminDepartmentDetails extends AppCompatActivity {
 
     private TextView txtDeptHeaderTitle, txtDeptFullName;
@@ -74,14 +81,68 @@ public class SuperAdminDepartmentDetails extends AppCompatActivity {
     }
 
     private void loadDepartmentMetrics() {
-        if (deptCode != null) {
-            int staffCount = repository.getStaffAdminCountForDept(deptCode);
-            int studentAdminCount = repository.getStudentAdminCountForDept(deptCode);
-            int studentCount = repository.getStudentCountForDept(deptCode);
+        if (deptCode == null) return;
 
-            if (txtDeptStaffCount != null) txtDeptStaffCount.setText(String.valueOf(staffCount));
-            if (txtDeptStudentAdminCount != null) txtDeptStudentAdminCount.setText(String.valueOf(studentAdminCount));
-            if (txtDeptStudentCount != null) txtDeptStudentCount.setText(String.valueOf(studentCount));
-        }
+        TrackPointRepository cloudRepo = TrackPointRepository.getInstance(this);
+
+        cloudRepo.getAllStaffAdmins(new TrackPointRepository.RepositoryCallback<List<StaffAdminDto>>() {
+            @Override
+            public void onSuccess(List<StaffAdminDto> list) {
+                int count = 0;
+                if (list != null) {
+                    for (StaffAdminDto s : list) {
+                        if (s.getDepartment() != null && (s.getDepartment().equalsIgnoreCase(deptCode) || s.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                            count++;
+                        }
+                    }
+                }
+                if (txtDeptStaffCount != null) txtDeptStaffCount.setText(String.valueOf(count));
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtDeptStaffCount != null) txtDeptStaffCount.setText("0");
+            }
+        });
+
+        cloudRepo.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+            @Override
+            public void onSuccess(List<StudentAdminDto> list) {
+                int count = 0;
+                if (list != null) {
+                    for (StudentAdminDto sa : list) {
+                        if (sa.getDepartment() != null && (sa.getDepartment().equalsIgnoreCase(deptCode) || sa.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                            count++;
+                        }
+                    }
+                }
+                if (txtDeptStudentAdminCount != null) txtDeptStudentAdminCount.setText(String.valueOf(count));
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtDeptStudentAdminCount != null) txtDeptStudentAdminCount.setText("0");
+            }
+        });
+
+        cloudRepo.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> list) {
+                int count = 0;
+                if (list != null) {
+                    for (StudentDto st : list) {
+                        if (st.getDepartment() != null && (st.getDepartment().equalsIgnoreCase(deptCode) || st.getDepartment().toLowerCase().contains(deptCode.toLowerCase()))) {
+                            count++;
+                        }
+                    }
+                }
+                if (txtDeptStudentCount != null) txtDeptStudentCount.setText(String.valueOf(count));
+            }
+
+            @Override
+            public void onError(Exception e) {
+                if (txtDeptStudentCount != null) txtDeptStudentCount.setText("0");
+            }
+        });
     }
 }
