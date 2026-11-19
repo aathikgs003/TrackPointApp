@@ -16,16 +16,21 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.DailyActivityDto;
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class StaffAdmin extends AppCompatActivity {
 
     private TextView quickAdmins;
     private TextView tvStaffAdminsCount, tvStaffStudentsCount, tvStaffAttendanceRate, tvStaffSubmissionsCount;
-    private StudentRepository repository;
+    private TrackPointRepository repository;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,7 +46,7 @@ public class StaffAdmin extends AppCompatActivity {
 
         setContentView(R.layout.activity_staff_admin);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         tvStaffAdminsCount = findViewById(R.id.tvStaffAdminsCount);
         tvStaffStudentsCount = findViewById(R.id.tvStaffStudentsCount);
@@ -140,36 +145,81 @@ public class StaffAdmin extends AppCompatActivity {
         String loggedInStaffName = sessionPrefs.getString("logged_in_staff_name", "Suruthika J");
         String loggedInStaffId = sessionPrefs.getString("logged_in_staff_id", "STF001");
 
-        StaffAdminModel currentStaff = repository.getStaffAdminByEmail(loggedInStaffId);
-        if (currentStaff == null) currentStaff = repository.getStaffAdminByEmail(loggedInStaffName);
-        if (currentStaff != null) loggedInStaffName = currentStaff.getName();
+        repository.getAllStudentAdmins(new TrackPointRepository.RepositoryCallback<List<StudentAdminDto>>() {
+            @Override
+            public void onSuccess(List<StudentAdminDto> adminsList) {
+                int saCount = (adminsList != null && !adminsList.isEmpty()) ? adminsList.size() : 1;
+                if (tvStaffAdminsCount != null) {
+                    tvStaffAdminsCount.setText(String.valueOf(saCount));
+                }
+            }
 
-        ArrayList<StudentAdminModel> assignedStudentAdmins = repository.getStudentAdminsForStaff(loggedInStaffName);
-        int studentAdminsCount = assignedStudentAdmins.size();
+            @Override
+            public void onError(Exception e) {}
+        });
 
-        int totalStudentsCount = 0;
-        for (StudentAdminModel sa : assignedStudentAdmins) {
-            totalStudentsCount += repository.getAssignedStudentsCountForAdmin(sa.getName());
-        }
-        if (totalStudentsCount == 0) {
-            totalStudentsCount = repository.getAllStudents().size();
-        }
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> studentList) {
+                int totalStudents = studentList != null ? studentList.size() : 0;
 
-        if (tvStaffAdminsCount != null) {
-            tvStaffAdminsCount.setText(String.valueOf(studentAdminsCount));
-        }
+                if (tvStaffStudentsCount != null) {
+                    tvStaffStudentsCount.setText(String.valueOf(totalStudents));
+                }
 
-        if (tvStaffStudentsCount != null) {
-            tvStaffStudentsCount.setText(String.valueOf(totalStudentsCount));
-        }
+                if (studentList == null || studentList.isEmpty()) {
+                    if (tvStaffSubmissionsCount != null) tvStaffSubmissionsCount.setText("0");
+                    if (tvStaffAttendanceRate != null) tvStaffAttendanceRate.setText("100%");
+                    return;
+                }
 
-        if (tvStaffAttendanceRate != null) {
-            tvStaffAttendanceRate.setText("95%");
-        }
+                SimpleDateFormat dateKeyFmt = new SimpleDateFormat("yyyy_MM_dd", Locale.getDefault());
+                String todayKey = dateKeyFmt.format(new Date());
 
-        if (tvStaffSubmissionsCount != null) {
-            tvStaffSubmissionsCount.setText(String.valueOf(totalStudentsCount));
-        }
+                final int totalCount = studentList.size();
+                final int[] submissionsSubmitted = {0};
+                final int[] completedQueries = {0};
+
+                for (StudentDto student : studentList) {
+                    String regNo = student.getRegisterNumber();
+                    if (regNo == null || regNo.isEmpty()) {
+                        completedQueries[0]++;
+                        continue;
+                    }
+
+                    repository.getDailyActivity(regNo, todayKey, new TrackPointRepository.RepositoryCallback<DailyActivityDto>() {
+                        @Override
+                        public void onSuccess(DailyActivityDto activity) {
+                            if (activity != null) {
+                                submissionsSubmitted[0]++;
+                            }
+                            checkDone();
+                        }
+
+                        @Override
+                        public void onError(Exception e) {
+                            checkDone();
+                        }
+
+                        private void checkDone() {
+                            completedQueries[0]++;
+                            if (completedQueries[0] >= totalCount) {
+                                if (tvStaffSubmissionsCount != null) {
+                                    tvStaffSubmissionsCount.setText(String.valueOf(submissionsSubmitted[0]));
+                                }
+                                int rate = totalCount > 0 ? (int) Math.round(((double) submissionsSubmitted[0] / totalCount) * 100) : 100;
+                                if (tvStaffAttendanceRate != null) {
+                                    tvStaffAttendanceRate.setText((rate > 0 ? rate : 100) + "%");
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {}
+        });
     }
 
     private void showLogoutDialog() {

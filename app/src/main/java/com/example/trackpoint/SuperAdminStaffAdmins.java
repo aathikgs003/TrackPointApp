@@ -131,8 +131,18 @@ public class SuperAdminStaffAdmins extends AppCompatActivity {
                 }
 
                 for (StaffAdminDto staff : dbList) {
-                    if (!deptFilter.equals("All Departments") && staff.getDepartment() != null && !staff.getDepartment().toLowerCase().contains(deptFilter.toLowerCase())) {
-                        continue;
+                    if (!deptFilter.equals("All Departments") && staff.getDepartment() != null) {
+                        String staffDept = staff.getDepartment().toLowerCase();
+                        String filter = deptFilter.toLowerCase();
+                        boolean match = staffDept.contains(filter);
+                        if (!match) {
+                            if (filter.equals("cse") && (staffDept.contains("computer science") || staffDept.contains("cse"))) match = true;
+                            else if (filter.equals("ai & ds") && (staffDept.contains("artificial intelligence") || staffDept.contains("ai") || staffDept.contains("ds"))) match = true;
+                            else if (filter.equals("ece") && (staffDept.contains("electronics") || staffDept.contains("ece"))) match = true;
+                            else if (filter.equals("it") && (staffDept.contains("information technology") || staffDept.contains("it"))) match = true;
+                            else if (filter.equals("mech") && (staffDept.contains("mechanical") || staffDept.contains("mech"))) match = true;
+                        }
+                        if (!match) continue;
                     }
                     if (!query.isEmpty() && staff.getName() != null && !staff.getName().toLowerCase().contains(query) && staff.getStaffId() != null && !staff.getStaffId().toLowerCase().contains(query)) {
                         continue;

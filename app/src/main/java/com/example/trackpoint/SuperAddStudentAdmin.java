@@ -17,14 +17,19 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.network.dto.StudentAdminDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class SuperAddStudentAdmin extends AppCompatActivity {
 
     private EditText edtStudentAdminName, edtStudentAdminId, edtStudentAdminPhone, edtStudentAdminEmail;
     private Spinner spStudentAdminDept, spStudentAdminYear, spAssignedStaffAdmin;
     private Button btnSaveStudentAdmin;
-    private StudentRepository repository;
+    private TrackPointRepository repository;
 
     private static final String[] DEPARTMENTS = {"Select Department", "CSE", "AI & DS", "ECE", "IT", "MECH"};
     private static final String[] YEARS = {"Select Year", "I Year", "II Year", "III Year", "IV Year"};
@@ -41,7 +46,7 @@ public class SuperAddStudentAdmin extends AppCompatActivity {
 
         setContentView(R.layout.activity_super_add_student_admin);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         ImageView btnBack = findViewById(R.id.btnBack);
         edtStudentAdminName = findViewById(R.id.edtStudentAdminName);
@@ -128,19 +133,40 @@ public class SuperAddStudentAdmin extends AppCompatActivity {
     }
 
     private void updateStaffAdminSpinner(String department, String preselectedStaff) {
-        ArrayList<StaffAdminModel> allStaff = repository.getAllStaffAdmins();
-        ArrayList<String> staffNames = new ArrayList<>();
-        staffNames.add("Select Staff Admin");
+        repository.getAllStaffAdmins(new TrackPointRepository.RepositoryCallback<List<StaffAdminDto>>() {
+            @Override
+            public void onSuccess(List<StaffAdminDto> allStaff) {
+                ArrayList<String> staffNames = new ArrayList<>();
+                staffNames.add("Select Staff Admin");
 
-        for (StaffAdminModel sa : allStaff) {
-            if (department == null || department.isEmpty()
-                    || sa.getDepartment().equalsIgnoreCase(department)
-                    || sa.getDepartment().toLowerCase().contains(department.toLowerCase())) {
-                staffNames.add(sa.getName());
+                if (allStaff != null) {
+                    for (StaffAdminDto sa : allStaff) {
+                        if (department == null || department.isEmpty() || department.equals("Select Department")
+                                || (sa.getDepartment() != null && (sa.getDepartment().equalsIgnoreCase(department) || sa.getDepartment().toLowerCase().contains(department.toLowerCase())))) {
+                            staffNames.add(sa.getName());
+                        }
+                    }
+                }
+
+                if (staffNames.size() == 1) {
+                    staffNames.add("Suruthika J");
+                }
+
+                setStaffSpinnerAdapter(staffNames, preselectedStaff);
             }
-        }
 
-        ArrayAdapter<String> staffAdapter = new ArrayAdapter<String>(this, R.layout.spinner_item, staffNames.toArray(new String[0])) {
+            @Override
+            public void onError(Exception e) {
+                ArrayList<String> staffNames = new ArrayList<>();
+                staffNames.add("Select Staff Admin");
+                staffNames.add("Suruthika J");
+                setStaffSpinnerAdapter(staffNames, preselectedStaff);
+            }
+        });
+    }
+
+    private void setStaffSpinnerAdapter(ArrayList<String> staffNames, String preselectedStaff) {
+        ArrayAdapter<String> staffAdapter = new ArrayAdapter<String>(SuperAddStudentAdmin.this, R.layout.spinner_item, staffNames.toArray(new String[0])) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
                 TextView view = (TextView) super.getView(position, convertView, parent);
@@ -199,11 +225,6 @@ public class SuperAddStudentAdmin extends AppCompatActivity {
             return;
         }
 
-        if (repository.adminIdExists(id)) {
-            Toast.makeText(this, "Admin ID already exists in database!", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         String dept = spStudentAdminDept.getSelectedItem().toString();
         String year = spStudentAdminYear.getSelectedItem().toString();
         String assignedStaff = spAssignedStaffAdmin.getSelectedItem().toString();
@@ -211,30 +232,46 @@ public class SuperAddStudentAdmin extends AppCompatActivity {
         if (phone.isEmpty()) {
             phone = "98765 00000";
         }
-        if (email.isEmpty()) {
-            email = name.toLowerCase().replaceAll("\\s+", ".") + "@college.edu";
-        }
+        String finalEmail = email.isEmpty() ? name.toLowerCase().replaceAll("\\s+", ".") + "@college.edu" : email;
+        String formattedPhone = phone.startsWith("+91") ? phone : "+91 " + phone;
 
-        StudentAdminModel newAdmin = new StudentAdminModel(name, id, dept, year, email, phone.startsWith("+91") ? phone : "+91 " + phone);
-        newAdmin.setStudentsAssignedCount(0);
+        btnSaveStudentAdmin.setEnabled(false);
 
-        long rowId = repository.addStudentAdmin(newAdmin);
+        StudentAdminDto newAdmin = new StudentAdminDto(
+                name,
+                id,
+                dept,
+                year,
+                finalEmail,
+                formattedPhone,
+                "123",
+                0,
+                assignedStaff
+        );
 
-        if (rowId > 0) {
-            Intent resultIntent = new Intent();
-            resultIntent.putExtra("adminName", name);
-            resultIntent.putExtra("adminId", id);
-            resultIntent.putExtra("department", dept);
-            resultIntent.putExtra("year", year);
-            resultIntent.putExtra("phone", phone);
-            resultIntent.putExtra("email", email);
-            resultIntent.putExtra("assignedStaff", assignedStaff);
+        repository.createStudentAdmin(newAdmin, new TrackPointRepository.RepositoryCallback<StudentAdminDto>() {
+            @Override
+            public void onSuccess(StudentAdminDto result) {
+                btnSaveStudentAdmin.setEnabled(true);
+                Intent resultIntent = new Intent();
+                resultIntent.putExtra("adminName", name);
+                resultIntent.putExtra("adminId", id);
+                resultIntent.putExtra("department", dept);
+                resultIntent.putExtra("year", year);
+                resultIntent.putExtra("phone", formattedPhone);
+                resultIntent.putExtra("email", finalEmail);
+                resultIntent.putExtra("assignedStaff", assignedStaff);
 
-            setResult(RESULT_OK, resultIntent);
-            Toast.makeText(this, name + " saved to SQLite database!", Toast.LENGTH_SHORT).show();
-            finish();
-        } else {
-            Toast.makeText(this, "Failed to save Student Admin", Toast.LENGTH_SHORT).show();
-        }
+                setResult(RESULT_OK, resultIntent);
+                Toast.makeText(SuperAddStudentAdmin.this, name + " saved to Neon database!", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                btnSaveStudentAdmin.setEnabled(true);
+                Toast.makeText(SuperAddStudentAdmin.this, "Failed to save Student Admin: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

@@ -19,7 +19,11 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class SuperAdminStudents extends AppCompatActivity {
 
@@ -29,7 +33,7 @@ public class SuperAdminStudents extends AppCompatActivity {
     Spinner spSuperStudentDept, spSuperStudentYear;
     LinearLayout superStudentListContainer;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     int purple = Color.parseColor("#4935B8");
     String lockedDepartment = null;
 
@@ -43,7 +47,7 @@ public class SuperAdminStudents extends AppCompatActivity {
 
         setContentView(R.layout.activity_super_admin_students);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         btnBack = findViewById(R.id.btnBack);
         txtHeaderTitle = findViewById(R.id.txtHeaderTitle);
@@ -105,91 +109,126 @@ public class SuperAdminStudents extends AppCompatActivity {
 
     private void renderList() {
         if (superStudentListContainer == null) return;
-        superStudentListContainer.removeAllViews();
 
-        String dept = (lockedDepartment != null && !lockedDepartment.isEmpty()) ? lockedDepartment : spSuperStudentDept.getSelectedItem().toString();
-        String year = spSuperStudentYear.getSelectedItem().toString();
+        String dept = (lockedDepartment != null && !lockedDepartment.isEmpty()) ? lockedDepartment :
+                (spSuperStudentDept.getSelectedItem() != null ? spSuperStudentDept.getSelectedItem().toString() : "All Departments");
+        String year = spSuperStudentYear.getSelectedItem() != null ? spSuperStudentYear.getSelectedItem().toString() : "All Years";
         String query = searchSuperStudent.getText().toString().toLowerCase().trim();
 
-        ArrayList<StudentModel> dbList = repository.searchAndFilterStudents(query, dept, year);
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> rawList) {
+                superStudentListContainer.removeAllViews();
 
-        if (dbList.isEmpty()) {
-            TextView emptyView = new TextView(this);
-            emptyView.setText("No students found in database");
-            emptyView.setPadding(16, 32, 16, 32);
-            emptyView.setGravity(Gravity.CENTER);
-            emptyView.setTextColor(Color.parseColor("#68738A"));
-            superStudentListContainer.addView(emptyView);
-            return;
-        }
+                List<StudentDto> filtered = new ArrayList<>();
+                if (rawList != null) {
+                    for (StudentDto s : rawList) {
+                        boolean matchesSearch = query.isEmpty() ||
+                                (s.getName() != null && s.getName().toLowerCase().contains(query)) ||
+                                (s.getRegisterNumber() != null && s.getRegisterNumber().toLowerCase().contains(query));
 
-        for (StudentModel s : dbList) {
-            LinearLayout card = new LinearLayout(this);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            params.setMargins(0, 0, 0, dpToPx(10));
-            card.setLayoutParams(params);
-            card.setOrientation(LinearLayout.HORIZONTAL);
-            card.setGravity(Gravity.CENTER_VERTICAL);
-            card.setPadding(dpToPx(14), dpToPx(14), dpToPx(14), dpToPx(14));
-            card.setBackgroundResource(R.drawable.action_card);
-            card.setElevation(dpToPx(2));
+                        boolean matchesDept = "All Departments".equalsIgnoreCase(dept) ||
+                                (s.getDepartment() != null && (s.getDepartment().equalsIgnoreCase(dept) || s.getDepartment().toLowerCase().contains(dept.toLowerCase())));
 
-            ImageView avatar = new ImageView(this);
-            avatar.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(44), dpToPx(44)));
-            avatar.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
-            avatar.setImageResource(R.drawable.profile_symbol);
-            avatar.setColorFilter(purple);
-            avatar.setBackgroundResource(R.drawable.card_purple);
+                        boolean matchesYear = "All Years".equalsIgnoreCase(year) ||
+                                (s.getYear() != null && s.getYear().equalsIgnoreCase(year));
 
-            LinearLayout info = new LinearLayout(this);
-            info.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            info.setOrientation(LinearLayout.VERTICAL);
-            info.setPadding(dpToPx(12), 0, 0, 0);
+                        if (matchesSearch && matchesDept && matchesYear) {
+                            filtered.add(s);
+                        }
+                    }
+                }
 
-            TextView tvName = new TextView(this);
-            tvName.setText(s.getName());
-            tvName.setTypeface(null, Typeface.BOLD);
-            tvName.setTextSize(16);
-            tvName.setTextColor(Color.parseColor("#18233F"));
+                if (filtered.isEmpty()) {
+                    TextView emptyView = new TextView(SuperAdminStudents.this);
+                    emptyView.setText("No students found in Neon database");
+                    emptyView.setPadding(16, 32, 16, 32);
+                    emptyView.setGravity(Gravity.CENTER);
+                    emptyView.setTextColor(Color.parseColor("#68738A"));
+                    superStudentListContainer.addView(emptyView);
+                    return;
+                }
 
-            TextView tvMeta = new TextView(this);
-            tvMeta.setText(s.getRegisterNumber() + "  •  " + s.getDepartment() + " (" + s.getYear() + ")");
-            tvMeta.setTextSize(12);
-            tvMeta.setTextColor(Color.parseColor("#68738A"));
+                for (StudentDto s : filtered) {
+                    LinearLayout card = new LinearLayout(SuperAdminStudents.this);
+                    LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    params.setMargins(0, 0, 0, dpToPx(10));
+                    card.setLayoutParams(params);
+                    card.setOrientation(LinearLayout.HORIZONTAL);
+                    card.setGravity(Gravity.CENTER_VERTICAL);
+                    card.setPadding(dpToPx(14), dpToPx(14), dpToPx(14), dpToPx(14));
+                    card.setBackgroundResource(R.drawable.action_card);
+                    card.setElevation(dpToPx(2));
 
-            TextView tvAdmin = new TextView(this);
-            String admin = s.getAssignedAdmin() != null ? s.getAssignedAdmin() : "Aathi";
-            tvAdmin.setText("Student Admin: " + admin);
-            tvAdmin.setTextSize(12);
-            tvAdmin.setTextColor(purple);
+                    ImageView avatar = new ImageView(SuperAdminStudents.this);
+                    avatar.setLayoutParams(new LinearLayout.LayoutParams(dpToPx(44), dpToPx(44)));
+                    avatar.setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8));
+                    avatar.setImageResource(R.drawable.profile_symbol);
+                    avatar.setColorFilter(purple);
+                    avatar.setBackgroundResource(R.drawable.card_purple);
 
-            info.addView(tvName);
-            info.addView(tvMeta);
-            info.addView(tvAdmin);
+                    LinearLayout info = new LinearLayout(SuperAdminStudents.this);
+                    info.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                    info.setOrientation(LinearLayout.VERTICAL);
+                    info.setPadding(dpToPx(12), 0, 0, 0);
 
-            TextView arrow = new TextView(this);
-            arrow.setText("›");
-            arrow.setTextSize(26);
-            arrow.setTextColor(Color.parseColor("#68738A"));
+                    TextView tvName = new TextView(SuperAdminStudents.this);
+                    tvName.setText(s.getName());
+                    tvName.setTypeface(null, Typeface.BOLD);
+                    tvName.setTextSize(16);
+                    tvName.setTextColor(Color.parseColor("#18233F"));
 
-            card.addView(avatar);
-            card.addView(info);
-            card.addView(arrow);
+                    TextView tvMeta = new TextView(SuperAdminStudents.this);
+                    tvMeta.setText(s.getRegisterNumber() + "  •  " + s.getDepartment() + " (" + s.getYear() + ")");
+                    tvMeta.setTextSize(12);
+                    tvMeta.setTextColor(Color.parseColor("#68738A"));
 
-            card.setOnClickListener(v -> {
-                Intent intent = new Intent(this, StaffStudentDetails.class);
-                intent.putExtra("studentName", s.getName());
-                intent.putExtra("studentId", s.getRegisterNumber());
-                intent.putExtra("department", s.getDepartment());
-                intent.putExtra("year", s.getYear());
-                intent.putExtra("phone", s.getPhone());
-                intent.putExtra("email", s.getEmail());
-                startActivity(intent);
-            });
+                    TextView tvAdmin = new TextView(SuperAdminStudents.this);
+                    String admin = s.getAssignedAdmin() != null ? s.getAssignedAdmin() : "Aathi";
+                    tvAdmin.setText("Student Admin: " + admin);
+                    tvAdmin.setTextSize(12);
+                    tvAdmin.setTextColor(purple);
 
-            superStudentListContainer.addView(card);
-        }
+                    info.addView(tvName);
+                    info.addView(tvMeta);
+                    info.addView(tvAdmin);
+
+                    TextView arrow = new TextView(SuperAdminStudents.this);
+                    arrow.setText("›");
+                    arrow.setTextSize(26);
+                    arrow.setTextColor(Color.parseColor("#68738A"));
+
+                    card.addView(avatar);
+                    card.addView(info);
+                    card.addView(arrow);
+
+                    card.setOnClickListener(v -> {
+                        Intent intent = new Intent(SuperAdminStudents.this, StaffStudentDetails.class);
+                        intent.putExtra("studentName", s.getName());
+                        intent.putExtra("studentId", s.getRegisterNumber());
+                        intent.putExtra("department", s.getDepartment());
+                        intent.putExtra("year", s.getYear());
+                        intent.putExtra("phone", s.getPhone());
+                        intent.putExtra("email", s.getEmail());
+                        startActivity(intent);
+                    });
+
+                    superStudentListContainer.addView(card);
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                superStudentListContainer.removeAllViews();
+                TextView emptyView = new TextView(SuperAdminStudents.this);
+                emptyView.setText("Failed to load students from database");
+                emptyView.setPadding(16, 32, 16, 32);
+                emptyView.setGravity(Gravity.CENTER);
+                emptyView.setTextColor(Color.parseColor("#68738A"));
+                superStudentListContainer.addView(emptyView);
+            }
+        });
     }
 
     private int dpToPx(int dp) {

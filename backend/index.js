@@ -53,7 +53,7 @@ async function generatePresignedUrl(objectKey, expirationSeconds = 3600) {
   if (!objectKey) return '';
   try {
     const command = new GetObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint-data',
+      Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint--data',
       Key: objectKey
     });
     return await getSignedUrl(s3Client, command, { expiresIn: expirationSeconds });
@@ -357,19 +357,64 @@ app.get('/api/staff-admins/:idOrEmail', async (req, res) => {
 
 app.post('/api/staff-admins', async (req, res) => {
   const { name, staff_id, department, email, phone, password } = req.body;
+
+  if (!name || !name.trim() || !staff_id || !staff_id.trim() || !department || !department.trim() || !email || !email.trim()) {
+    return res.status(400).json({ error: 'Name, Staff ID, Department, and Email are required fields' });
+  }
+
+  const cleanName = name.trim();
+  const cleanStaffId = staff_id.trim();
+  const cleanDept = department.trim();
+  const cleanEmail = email.trim();
+  const cleanPhone = phone && phone.trim() ? phone.trim() : '+91 98765 00000';
+  const cleanPassword = password && password.trim() ? password.trim() : '123';
+
   try {
+    const checkExisting = await pool.query(
+      'SELECT staff_id, email FROM staff_admins WHERE LOWER(staff_id) = LOWER($1) OR LOWER(email) = LOWER($2)',
+      [cleanStaffId, cleanEmail]
+    );
+
+    if (checkExisting.rows.length > 0) {
+      const matchId = checkExisting.rows.some(r => r.staff_id.toLowerCase() === cleanStaffId.toLowerCase());
+      const matchEmail = checkExisting.rows.some(r => r.email.toLowerCase() === cleanEmail.toLowerCase());
+
+      if (matchId && matchEmail) {
+        return res.status(409).json({ error: 'Staff ID and Email address already exist' });
+      } else if (matchId) {
+        return res.status(409).json({ error: 'Staff ID already exists' });
+      } else if (matchEmail) {
+        return res.status(409).json({ error: 'Email address already exists' });
+      }
+    }
+
     const query = `
       INSERT INTO staff_admins (name, staff_id, department, email, phone, password)
-      VALUES ($1, $2, $3, $4, $5, COALESCE($6, '123'))
-      ON CONFLICT (staff_id) DO UPDATE SET
-        name = EXCLUDED.name, department = EXCLUDED.department, email = EXCLUDED.email,
-        phone = EXCLUDED.phone, password = EXCLUDED.password, updated_at = NOW()
-      RETURNING *;
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, name, staff_id, department, email, phone, created_at, updated_at;
     `;
-    const result = await pool.query(query, [name, staff_id, department, email, phone, password]);
+
+    const result = await pool.query(query, [
+      cleanName,
+      cleanStaffId,
+      cleanDept,
+      cleanEmail,
+      cleanPhone,
+      cleanPassword
+    ]);
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (err.code === '23505') {
+      if (err.constraint === 'staff_admins_staff_id_key') {
+        return res.status(409).json({ error: 'Staff ID already exists' });
+      } else if (err.constraint === 'staff_admins_email_key') {
+        return res.status(409).json({ error: 'Email address already exists' });
+      }
+      return res.status(409).json({ error: 'Staff ID or Email address already exists in database' });
+    }
+    console.error('[-] Error creating staff admin:', err.message);
+    res.status(500).json({ error: 'Failed to create Staff Admin due to server error' });
   }
 });
 
@@ -571,7 +616,7 @@ const upsertActivityHandler = async (req, res) => {
       const objectKey = `submissions/${register_number || 'UNKNOWN'}/${date_key || Date.now()}_${fileNameStr}`;
 
       const putCommand = new PutObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint-data',
+        Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint--data',
         Key: objectKey,
         Body: req.file.buffer,
         ContentType: req.file.mimetype
@@ -637,7 +682,7 @@ const deleteActivityHandler = async (req, res) => {
       const fileKey = findRes.rows[0].file_key;
       try {
         const deleteCommand = new DeleteObjectCommand({
-          Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint-data',
+          Bucket: process.env.AWS_S3_BUCKET_NAME || 'trackpoint--data',
           Key: fileKey
         });
         await s3Client.send(deleteCommand);

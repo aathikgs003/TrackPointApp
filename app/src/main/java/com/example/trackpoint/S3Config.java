@@ -8,10 +8,10 @@ public class S3Config {
 
     public static String ENDPOINT = "https://s3.us-east-005.backblazeb2.com";
     public static String REGION = "us-east-005";
-    public static String ACCESS_KEY_ID = "0051269645c6ad00000000002";
-    public static String SECRET_ACCESS_KEY = "K005AEnnRDFdV3VeNDt+GO9A0VMnLUI";
-    public static String BUCKET_NAME = "trackpoint-data";
-    public static String API_BASE_URL = "http://10.11.13.215:5000/";
+    public static String ACCESS_KEY_ID = "0055d972f4bbe320000000001";
+    public static String SECRET_ACCESS_KEY = "K005L7F8nbdagudltmppBnYy0qm294s";
+    public static String BUCKET_NAME = "trackpoint--data";
+    public static String API_BASE_URL = "https://strong-eagle-44.loca.lt/";
 
     private static boolean isInitialized = false;
 

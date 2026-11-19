@@ -16,12 +16,15 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StaffAdminDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 public class SuperAddStaffAdmin extends AppCompatActivity {
 
     private EditText edtStaffName, edtStaffId, edtStaffEmail, edtStaffPhone;
     private Spinner spStaffDept;
     private Button btnSaveStaffAdmin;
-    private StudentRepository repository;
+    private TrackPointRepository repository;
 
     private static final String[] DEPARTMENTS = {"Select Department", "CSE", "AI & DS", "ECE", "IT", "MECH"};
 
@@ -37,7 +40,7 @@ public class SuperAddStaffAdmin extends AppCompatActivity {
 
         setContentView(R.layout.activity_super_add_staff_admin);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         ImageView btnBack = findViewById(R.id.btnBack);
         edtStaffName = findViewById(R.id.edtStaffName);
@@ -121,22 +124,36 @@ public class SuperAddStaffAdmin extends AppCompatActivity {
             phone = "98765 00000";
         }
 
-        StaffAdminModel newStaff = new StaffAdminModel(name, id, dept, email, phone.startsWith("+91") ? phone : "+91 " + phone);
-        long rowId = repository.addStaffAdmin(newStaff);
+        String formattedPhone = phone.startsWith("+91") ? phone : "+91 " + phone;
 
-        if (rowId > 0) {
-            Intent resultIntent = new Intent();
-            resultIntent.putExtra("staffName", name);
-            resultIntent.putExtra("staffId", id);
-            resultIntent.putExtra("department", dept);
-            resultIntent.putExtra("email", email);
-            resultIntent.putExtra("phone", phone);
+        btnSaveStaffAdmin.setEnabled(false);
 
-            setResult(RESULT_OK, resultIntent);
-            Toast.makeText(this, name + " saved to " + dept + " in SQLite database!", Toast.LENGTH_SHORT).show();
-            finish();
-        } else {
-            Toast.makeText(this, "Failed to save Staff Admin", Toast.LENGTH_SHORT).show();
-        }
+        StaffAdminDto staffDto = new StaffAdminDto(name, id, dept, email, formattedPhone, "123");
+
+        repository.createStaffAdmin(staffDto, new TrackPointRepository.RepositoryCallback<StaffAdminDto>() {
+            @Override
+            public void onSuccess(StaffAdminDto result) {
+                btnSaveStaffAdmin.setEnabled(true);
+                Intent resultIntent = new Intent();
+                resultIntent.putExtra("staffName", name);
+                resultIntent.putExtra("staffId", id);
+                resultIntent.putExtra("department", dept);
+                resultIntent.putExtra("email", email);
+                resultIntent.putExtra("phone", formattedPhone);
+
+                setResult(RESULT_OK, resultIntent);
+                Toast.makeText(SuperAddStaffAdmin.this, name + " saved to " + dept + " in Neon database!", Toast.LENGTH_SHORT).show();
+                finish();
+            }
+
+            @Override
+            public void onError(Exception e) {
+                btnSaveStaffAdmin.setEnabled(true);
+                String errorMsg = (e != null && e.getMessage() != null && !e.getMessage().isEmpty()) 
+                        ? e.getMessage() 
+                        : "Failed to create Staff Admin";
+                Toast.makeText(SuperAddStaffAdmin.this, errorMsg, Toast.LENGTH_LONG).show();
+            }
+        });
     }
 }

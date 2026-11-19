@@ -20,7 +20,11 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.WindowCompat;
 
+import com.example.trackpoint.network.dto.StudentDto;
+import com.example.trackpoint.repository.TrackPointRepository;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class StaffAdminStudents extends AppCompatActivity {
 
@@ -31,7 +35,7 @@ public class StaffAdminStudents extends AppCompatActivity {
     LinearLayout studentListContainer;
     Button btnAddStudent;
 
-    StudentRepository repository;
+    TrackPointRepository repository;
     int purple = Color.parseColor("#4935B8");
 
     String filterByAdminName = null;
@@ -48,7 +52,7 @@ public class StaffAdminStudents extends AppCompatActivity {
 
         setContentView(R.layout.activity_staff_admin_students);
 
-        repository = new StudentRepository(this);
+        repository = TrackPointRepository.getInstance(this);
 
         btnBack = findViewById(R.id.btnBack);
         txtHeaderTitle = findViewById(R.id.txtHeaderTitle);
@@ -121,59 +125,71 @@ public class StaffAdminStudents extends AppCompatActivity {
 
     private void applyFilters() {
         if (studentListContainer == null) return;
-        studentListContainer.removeAllViews();
-
-        android.content.SharedPreferences sessionPrefs = getSharedPreferences("SessionPrefs", MODE_PRIVATE);
-        String loggedInStaffName = sessionPrefs.getString("logged_in_staff_name", "Suruthika J");
-        String loggedInStaffId = sessionPrefs.getString("logged_in_staff_id", "STF001");
-
-        StaffAdminModel currentStaff = repository.getStaffAdminByEmail(loggedInStaffId);
-        if (currentStaff == null) currentStaff = repository.getStaffAdminByEmail(loggedInStaffName);
-        if (currentStaff != null) loggedInStaffName = currentStaff.getName();
 
         String selectedDept = spFilterDepartment.getSelectedItem() != null ? spFilterDepartment.getSelectedItem().toString() : "All Departments";
         String selectedYear = spFilterYear.getSelectedItem() != null ? spFilterYear.getSelectedItem().toString() : "All Years";
-        String query = searchStudent.getText().toString().trim();
+        String query = searchStudent.getText().toString().trim().toLowerCase();
 
-        ArrayList<StudentModel> dbList = new ArrayList<>();
+        repository.getAllStudents(new TrackPointRepository.RepositoryCallback<List<StudentDto>>() {
+            @Override
+            public void onSuccess(List<StudentDto> rawList) {
+                studentListContainer.removeAllViews();
 
-        if (filterByAdminName != null && !filterByAdminName.isEmpty()) {
-            dbList = repository.searchAndFilterStudentsForAdmin(query, selectedDept, selectedYear, filterByAdminName);
-        } else {
-            ArrayList<StudentAdminModel> staffStudentAdmins = repository.getStudentAdminsForStaff(loggedInStaffName);
-            for (StudentAdminModel sa : staffStudentAdmins) {
-                ArrayList<StudentModel> saStudents = repository.searchAndFilterStudentsForAdmin(query, selectedDept, selectedYear, sa.getName());
-                for (StudentModel s : saStudents) {
-                    if (!dbList.contains(s)) {
-                        dbList.add(s);
+                List<StudentDto> filteredList = new ArrayList<>();
+                if (rawList != null) {
+                    for (StudentDto s : rawList) {
+                        boolean matchesSearch = query.isEmpty() ||
+                                (s.getName() != null && s.getName().toLowerCase().contains(query)) ||
+                                (s.getRegisterNumber() != null && s.getRegisterNumber().toLowerCase().contains(query));
+
+                        boolean matchesDept = "All Departments".equalsIgnoreCase(selectedDept) ||
+                                (s.getDepartment() != null && (s.getDepartment().equalsIgnoreCase(selectedDept) || s.getDepartment().toLowerCase().contains(selectedDept.toLowerCase())));
+
+                        boolean matchesYear = "All Years".equalsIgnoreCase(selectedYear) ||
+                                (s.getYear() != null && s.getYear().equalsIgnoreCase(selectedYear));
+
+                        boolean matchesAdmin = filterByAdminName == null || filterByAdminName.isEmpty() ||
+                                (s.getAssignedAdmin() != null && s.getAssignedAdmin().equalsIgnoreCase(filterByAdminName));
+
+                        if (matchesSearch && matchesDept && matchesYear && matchesAdmin) {
+                            filteredList.add(s);
+                        }
                     }
                 }
-            }
-            if (dbList.isEmpty()) {
-                dbList = repository.searchAndFilterStudentsForAdmin(query, selectedDept, selectedYear, null);
-            }
-        }
 
-        if (dbList.isEmpty()) {
-            TextView emptyView = new TextView(this);
-            if (filterByAdminName != null && !filterByAdminName.isEmpty()) {
-                emptyView.setText("No students assigned to " + filterByAdminName + " in database");
-            } else {
-                emptyView.setText("No students found in database");
-            }
-            emptyView.setPadding(16, 32, 16, 32);
-            emptyView.setGravity(Gravity.CENTER);
-            emptyView.setTextColor(Color.parseColor("#68738A"));
-            studentListContainer.addView(emptyView);
-            return;
-        }
+                if (filteredList.isEmpty()) {
+                    TextView emptyView = new TextView(StaffAdminStudents.this);
+                    if (filterByAdminName != null && !filterByAdminName.isEmpty()) {
+                        emptyView.setText("No students assigned to " + filterByAdminName + " in database");
+                    } else {
+                        emptyView.setText("No students found in database");
+                    }
+                    emptyView.setPadding(16, 32, 16, 32);
+                    emptyView.setGravity(Gravity.CENTER);
+                    emptyView.setTextColor(Color.parseColor("#68738A"));
+                    studentListContainer.addView(emptyView);
+                    return;
+                }
 
-        for (StudentModel student : dbList) {
-            addStudentCard(student);
-        }
+                for (StudentDto student : filteredList) {
+                    addStudentCard(student);
+                }
+            }
+
+            @Override
+            public void onError(Exception e) {
+                studentListContainer.removeAllViews();
+                TextView emptyView = new TextView(StaffAdminStudents.this);
+                emptyView.setText("Failed to load students from database");
+                emptyView.setPadding(16, 32, 16, 32);
+                emptyView.setGravity(Gravity.CENTER);
+                emptyView.setTextColor(Color.parseColor("#68738A"));
+                studentListContainer.addView(emptyView);
+            }
+        });
     }
 
-    private void addStudentCard(StudentModel student) {
+    private void addStudentCard(StudentDto student) {
         LinearLayout card = new LinearLayout(this);
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
