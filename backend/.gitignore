@@ -1,6 +1,9 @@
 node_modules/
 .env
 *.env
+*service_account*.json
+*firebase*.json
+keys/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
